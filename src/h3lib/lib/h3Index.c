@@ -448,11 +448,15 @@ int H3_EXPORT(isValidIndex)(H3Index h) {
  * @param initDigit The H3 digit (0-7) to initialize all of the index digits to.
  */
 void setH3Index(H3Index *hp, int res, int baseCell, Direction initDigit) {
-    H3Index h = H3_INIT;
+    // H3-EXTENDED: Rule INIT (playbook §5.5). Ext path seeds digits 1-22 to
+    // sentinel 7 via H3_INIT_EXT; stock path keeps H3_INIT byte-identical.
+    H3Index h = (res > MAX_H3_RES) ? H3_INIT_EXT : H3_INIT;
     H3_SET_MODE(h, H3_CELL_MODE);
-    H3_SET_RESOLUTION(h, res);
+    // H3-EXTENDED: Rule RW (§5.4) — atomic write of low-4-bit res field + ext flag.
+    H3_SET_EFFECTIVE_RESOLUTION(h, res);
     H3_SET_BASE_CELL(h, baseCell);
-    for (int r = 1; r <= res; r++) H3_SET_INDEX_DIGIT(h, r, initDigit);
+    // H3-EXTENDED: Rule DW (§5.3) — dispatch to ext-digit setter for r > 15.
+    for (int r = 1; r <= res; r++) H3_SET_DIGIT_AT_RES(h, r, initDigit);
     *hp = h;
 }
 
