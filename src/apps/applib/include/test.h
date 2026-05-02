@@ -20,10 +20,28 @@
 #ifndef TEST_H
 #define TEST_H
 
+#include <math.h>
+#include <stdbool.h>
 #include <stdio.h>
 
 #include "h3api.h"
 #include "latLng.h"
+
+// H3-EXTENDED: libm tolerance helper for lat/lng round-trip tests at ext
+// resolutions (16-22). Per playbook §9.2: round-trip tests cannot be
+// byte-exact at high resolution because intermediate sin/cos/asin results
+// vary across libm implementations (glibc vs musl vs Apple libm). Tighter
+// tolerance for ext where cell edges drop to ~1cm (res 16) and below.
+//
+// Tolerance values are empirical — the playbook calls for calibration by
+// running glibc/musl/darwin and taking 10x the worst observed delta.
+// Initial pre-calibration values: 1e-12 rad (~6.4 um) for ext, 1e-9 rad
+// (~6.4 mm) for stock. Used by Phase D-G1 / D-G2 round-trip tests.
+static inline bool latlng_within_tolerance(LatLng a, LatLng b, int res) {
+    double tolerance_rads = res >= 16 ? 1e-12 : 1e-9;
+    return fabs(a.lat - b.lat) < tolerance_rads &&
+           fabs(a.lng - b.lng) < tolerance_rads;
+}
 
 extern int globalTestCount;
 extern const char *currentSuiteName;
