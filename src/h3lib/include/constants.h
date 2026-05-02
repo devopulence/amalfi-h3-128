@@ -75,6 +75,10 @@
 /** max H3 resolution; H3 version 1 has 16 resolutions, numbered 0 through 15 */
 #define MAX_H3_RES 15
 
+// H3-EXTENDED: max effective resolution including ext range 16-22 (~1cm edge).
+/** max H3-Extended resolution; ext cells use resolutions 16 through 22. */
+#define MAX_H3_EXT_RES 22
+
 /** The number of faces on an icosahedron */
 #define NUM_ICOSA_FACES 20
 /** The number of H3 base cells */
