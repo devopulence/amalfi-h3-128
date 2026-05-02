@@ -257,6 +257,8 @@ add_h3_test(testBaseCells src/apps/testapps/testBaseCells.c)
 add_h3_test(testBaseCellsInternal src/apps/testapps/testBaseCellsInternal.c)
 add_h3_test(testPentagonIndexes src/apps/testapps/testPentagonIndexes.c)
 add_h3_test(testH3IteratorsInternal src/apps/testapps/testH3IteratorsInternal.c)
+# H3-EXTENDED Phase C: string I/O round-trip for ext cells.
+add_h3_test(testStringExt src/apps/testapps/testStringExt.c)
 add_h3_test(testMathExtensionsInternal
             src/apps/testapps/testMathExtensionsInternal.c)
 add_h3_test(testDescribeH3Error src/apps/testapps/testDescribeH3Error.c)

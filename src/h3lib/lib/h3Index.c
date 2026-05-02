@@ -177,17 +177,45 @@ H3Error H3_EXPORT(constructCell)(int res, int baseCellNumber, const int *digits,
  * @param out Output: The H3 index corresponding to the string argument
  */
 H3Error H3_EXPORT(stringToH3)(const char *str, H3Index *out) {
-    H3Index h = H3_NULL;
-    // If failed, h will be unmodified and we should return H3_NULL anyways.
-    // H3-EXTENDED: stock-only 16-char hex parse; scan into uint64 intermediate
-    // and zero-extend. Phase C will widen for 32-char hex (ext cell support).
-    uint64_t low = 0;
-    int read = sscanf(str, "%" PRIx64, &low);
-    if (read != 1) {
-        return E_FAILED;
+    // H3-EXTENDED: accepts 1-32 lowercase/uppercase hex chars. 16 chars or
+    // fewer parse as legacy stock (low 64 bits, zero-extended). 17-32 chars
+    // parse as canonical 128-bit (split at len-16). Trailing whitespace is
+    // stripped (fgets-style line input compatibility); the remaining chars
+    // must all be hex.
+    if (str == NULL) return E_FAILED;
+    size_t len = strlen(str);
+    while (len > 0 && (str[len - 1] == '\n' || str[len - 1] == '\r' ||
+                       str[len - 1] == ' ' || str[len - 1] == '\t')) {
+        len--;
     }
-    h = (H3Index)low;
-    *out = h;
+    if (len == 0 || len > 32) return E_FAILED;
+    for (size_t i = 0; i < len; i++) {
+        char c = str[i];
+        if (!((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') ||
+              (c >= 'A' && c <= 'F'))) {
+            return E_FAILED;
+        }
+    }
+
+    char buf[33];
+    memcpy(buf, str, len);
+    buf[len] = '\0';
+
+    if (len <= 16) {
+        uint64_t lo = 0;
+        if (sscanf(buf, "%" PRIx64, &lo) != 1) return E_FAILED;
+        *out = (H3Index)lo;
+    } else {
+        size_t high_len = len - 16;
+        char high_buf[17];
+        memcpy(high_buf, buf, high_len);
+        high_buf[high_len] = '\0';
+
+        uint64_t hi = 0, lo = 0;
+        if (sscanf(high_buf, "%" PRIx64, &hi) != 1) return E_FAILED;
+        if (sscanf(buf + high_len, "%" PRIx64, &lo) != 1) return E_FAILED;
+        *out = ((H3Index)hi << 64) | (H3Index)lo;
+    }
     return E_SUCCESS;
 }
 
@@ -198,15 +226,20 @@ H3Error H3_EXPORT(stringToH3)(const char *str, H3Index *out) {
  * @param sz Size of the buffer `str`
  */
 H3Error H3_EXPORT(h3ToString)(H3Index h, char *str, size_t sz) {
-    // An unsigned 64 bit integer will be expressed in at most
-    // 16 digits plus 1 for the null terminator.
-    if (sz < 17) {
-        // Buffer is potentially not large enough.
-        return E_MEMORY_BOUNDS;
+    // H3-EXTENDED: stock cells (high 64 bits = 0) emit 16-char legacy hex
+    // (buffer >=17 bytes incl NUL) for byte-identical compat with stock H3
+    // 4.4.1 output. Ext cells emit 32-char canonical 128-bit hex (buffer
+    // >=33 bytes). Per playbook §9.3.
+    uint64_t hi = (uint64_t)(h >> 64);
+    uint64_t lo = (uint64_t)h;
+
+    if (hi == 0) {
+        if (sz < 17) return E_MEMORY_BOUNDS;
+        snprintf(str, sz, "%" PRIx64, lo);
+    } else {
+        if (sz < 33) return E_MEMORY_BOUNDS;
+        snprintf(str, sz, "%016" PRIx64 "%016" PRIx64, hi, lo);
     }
-    // H3-EXTENDED: stock-only 16-char hex output (low 64 bits only).
-    // Phase C will widen to 32-char hex with proper ext-cell support.
-    sprintf(str, "%" PRIx64, (uint64_t)h);
     return E_SUCCESS;
 }
 
