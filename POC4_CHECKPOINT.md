@@ -1,0 +1,22 @@
+# POC-4 Checkpoint
+- Date: 2026-05-02T14:23:34Z
+- Compiler: Apple clang version 21.0.0 (clang-2100.0.123.102)
+- Platform: Darwin arm64
+- Assertions: 1314 passed, 0 failed
+- ASAN: clean
+- UBSAN: clean
+- Exit code: 0
+- Result: POC-4 PASSED
+- Shim functions validated: all 10 (h3_ext_lat_lng_to_cell, h3_ext_cell_to_lat_lng, h3_ext_cell_to_parent, h3_ext_cell_to_children, h3_ext_cell_to_children_size, h3_ext_is_valid_cell, h3_ext_get_resolution, h3_ext_grid_distance, h3_ext_h3_to_string, h3_ext_string_to_h3)
+- Compilation model: separate TUs (poc4_shim.o + poc4_caller.o)
+- Cross-TU sizeof consistency: confirmed (16 bytes both sides)
+- Cross-TU alignof consistency: confirmed (16 bytes both sides)
+- String round-trips: 100 random ext cells, bit-identical
+- Sources: poc4_shim.h, poc4_shim.c, poc4_caller.c
+- Build commands:
+  - gcc -std=c99 -fsanitize=address,undefined -Werror -Wall -Wextra -c poc4_shim.c -o poc4_shim.o
+  - gcc -std=c99 -fsanitize=address,undefined -Werror -Wall -Wextra -c poc4_caller.c -o poc4_caller.o
+  - gcc -fsanitize=address,undefined -o poc4_ffi poc4_shim.o poc4_caller.o -lm
+- Run command: ./poc4_ffi
+- Coverage: 22 categories (ABI-01 through ABI-22) — caller- and shim-side sizeof/alignof, is_valid_cell on every clean stock and ext (resolution, base cell), wrong-mode rejection, high-bit / reserved (56–58) / reserved (86–127) rejection at every dirty bit, get_resolution across all 23 resolutions, cell_to_parent same-res identity and ext→stock high-half clearing with E_RES_DOMAIN on bad parentRes, cell_to_children_size for every (parent, child) pair in [0,22]×[parent,22], cell_to_children 343-element array round-trip with per-child invariants and dedup, lat_lng_to_cell determinism + E_DOMAIN on NaN + E_RES_DOMAIN on bad res, cell_to_lat_lng pointer writes, grid_distance same-cell zero and symmetry, h3_to_string format and length, string_to_h3 bad-input rejection (length, characters), 100-cell deterministic-LCG string round-trip with memcmp bit-identical assertion, NULL-pointer error contract for every parameter of every function (21 NULL cases), 500-cell stress with original-cell preservation across is_valid + get_resolution + to_string + from_string, adversarial all-zero / all-ones / single-bit-127 round-trips (the high-half pointer transit test), heap-array allocation alignment + write-through-pointer.
+- Conclusion: __uint128_t values survive cross-TU function calls intact when passed by pointer. The pointer-passing ABI is stable on this toolchain (Apple clang 21.0.0 / arm64); the shim contract is safe to use as the FFI layer for the H3-Extended fork. All four POCs are now validated — implementation Phases A, E, D4, and D7 may proceed.
