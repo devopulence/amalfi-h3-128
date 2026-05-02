@@ -1,0 +1,36 @@
+name: H3-Extended CI
+
+on:
+  push:
+    branches: [feat/h3-128-mvp, master]
+  pull_request:
+    branches: [feat/h3-128-mvp, master]
+
+jobs:
+  build-and-test:
+    name: ${{ matrix.config }} on ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+        config: [release, sanitizers]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure
+        run: |
+          mkdir -p build
+          if [[ "${{ matrix.config }}" == "sanitizers" ]]; then
+            cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug -DWARNINGS_AS_ERRORS=ON \
+              -DCMAKE_C_FLAGS="-fsanitize=address,undefined -fno-omit-frame-pointer -O1 -g -Wno-error=deprecated-declarations" \
+              -DCMAKE_EXE_LINKER_FLAGS="-fsanitize=address,undefined"
+          else
+            cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DWARNINGS_AS_ERRORS=ON
+          fi
+
+      - name: Build
+        run: cmake --build build -j
+
+      - name: Test
+        run: cd build && ctest --output-on-failure
