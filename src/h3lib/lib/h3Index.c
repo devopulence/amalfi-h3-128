@@ -995,9 +995,12 @@ H3Index _h3Rotate60cw(H3Index h) {
  */
 H3Index _faceIjkToH3(const FaceIJK *fijk, int res) {
     // initialize the index
-    H3Index h = H3_INIT;
+    // H3-EXTENDED: Rule INIT (§5.5 / §6.16) — ext path seeds digits 1-22 to
+    // sentinel 7. Stock path keeps H3_INIT byte-identical.
+    H3Index h = (res > MAX_H3_RES) ? H3_INIT_EXT : H3_INIT;
     H3_SET_MODE(h, H3_CELL_MODE);
-    H3_SET_RESOLUTION(h, res);
+    // H3-EXTENDED: Rule RW (§5.4 / §6.16) — atomic res field + ext flag write.
+    H3_SET_EFFECTIVE_RESOLUTION(h, res);
 
     // check for res 0/base cell
     if (res == 0) {
@@ -1039,7 +1042,8 @@ H3Index _faceIjkToH3(const FaceIJK *fijk, int res) {
         _ijkSub(&lastIJK, &lastCenter, &diff);
         _ijkNormalize(&diff);
 
-        H3_SET_INDEX_DIGIT(h, r + 1, _unitIjkToDigit(&diff));
+        // H3-EXTENDED: Rule DW (§5.3) — dispatching digit setter for r+1 > 15.
+        H3_SET_DIGIT_AT_RES(h, r + 1, _unitIjkToDigit(&diff));
     }
 
     // fijkBC should now hold the IJK of the base cell in the
