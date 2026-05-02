@@ -1,0 +1,15 @@
+# POC-2 Checkpoint
+- Date: 2026-05-02T13:58:25Z
+- Compiler: Apple clang version 21.0.0 (clang-2100.0.123.102)
+- Platform: Darwin arm64
+- Assertions: 3473 passed, 0 failed
+- ASAN: clean
+- UBSAN: clean
+- Exit code: 0
+- Result: POC-2 PASSED
+- Predicates validated: _hasGoodTopBits, _firstOneIndex, _hasAny7UptoRes, _hasAll7AfterRes, _hasDeletedSubsequence
+- Source: poc2_validation.c
+- Build command: gcc -std=c99 -fsanitize=address,undefined -Werror -Wall -Wextra -o poc2_validation poc2_validation.c -lm
+- Run command: ./poc2_validation
+- Coverage: 23 categories (VP-01 through VP-23) — clean stock/ext valid cells, high-bit corruption, reserved 56–58 corruption, reserved 86–127 corruption (each of 42 bits individually), combined corruption; _firstOneIndex single-bit sweep across all 128 positions, ext-cell MSB in high half (would UB without high-half handling), H3_INIT/H3_INIT_EXT sentinel locations; sentinel-7 detection through stock and ext digits; _hasAll7AfterRes corruption at every position past every res (stock + ext, with every non-7 value); pentagon K-axis detection through ext digits including stock-bug surface where stock would loop only to MAX_H3_RES.
+- Conclusion: All five widened predicates correctly handle 128-bit cells. The two CRITICAL items (`_hasGoodTopBits` structural break, `_firstOneIndex` clz UB) are both validated. POC-3 may proceed.
