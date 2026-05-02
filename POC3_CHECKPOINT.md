@@ -1,0 +1,17 @@
+# POC-3 Checkpoint
+- Date: 2026-05-02T14:08:02Z
+- Compiler: Apple clang version 21.0.0 (clang-2100.0.123.102)
+- Platform: Darwin arm64
+- Assertions: 4595 passed, 0 failed
+- ASAN: clean
+- UBSAN: clean
+- Exit code: 0
+- Result: POC-3 PASSED
+- Functions validated: _zeroIndexDigits, _incrementResDigit, _getResDigit, _iterInitParent, iterStepChild
+- Children enumerated: 828210
+- Max depth tested: res 15 → res 22 (823,543 children)
+- Source: poc3_iterator.c
+- Build command: gcc -std=c99 -fsanitize=address,undefined -Werror -Wall -Wextra -o poc3_iterator poc3_iterator.c -lm
+- Run command: ./poc3_iterator
+- Coverage: 28 categories (IT-01 through IT-28) — _zeroIndexDigits across stock-only / ext-only / boundary-crossing ranges plus full sweep over all (start,end) pairs in [1,22]; _incrementResDigit at every position 1..22 with isolation checks confirming no neighbor corruption; _iterInitParent for first-child centering and same-res / invalid-res cases; hexagon enumeration at boundary (15→16 = 7), two-level (14→16 = 49), three-level (15→18 = 343), stock-only (5→8 = 343); pentagon enumeration at base-cell res 0→1 (= 6 with K-axis skipped), pentagon at the stock/ext boundary 15→16 (= 6 with digit 16 ≠ 1), pentagon multilevel 14→17 (= 294); dedup across 2401-child enumeration; first/last-child ordering; FULL-DEPTH 823,543-child enumeration under UBSAN (the §6.6 / §6.10 trap test); same-res no-children edge case; cross-cutting invariants on base cell, mode, ext flag, and reserved bits.
+- Conclusion: All five widened iterator functions correctly cross the stock/ext boundary. The two PRIMARY UBSAN traps (negative-shift in _incrementResDigit and _zeroIndexDigits at res > 15) are eliminated, proven by the 823,543-child full-depth enumeration completing under UBSAN with zero stderr output. POC-4 may proceed.
