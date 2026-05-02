@@ -1,0 +1,14 @@
+# POC-1 Checkpoint
+- Date: 2026-05-02T13:50:18Z
+- Compiler: Apple clang version 21.0.0 (clang-2100.0.123.102)
+- Platform: Darwin arm64
+- Assertions: 685 passed, 0 failed
+- ASAN: clean
+- UBSAN: clean
+- Exit code: 0
+- Result: POC-1 PASSED
+- Source: poc1_bit_layout.c (pre-written, unmodified)
+- Build command: gcc -std=c99 -fsanitize=address,undefined -Werror -Wall -Wextra -o poc1_bit_layout poc1_bit_layout.c -lm
+- Run command: ./poc1_bit_layout
+- Coverage: 19 test categories (PF-01 through PF-19) — sizeof, stock zero-extension, resolution round-trip, ext flag range, stock-res field encoding, digit read/write round-trip for all 22 positions, bit position verification, reserved bits zeroing, H3_INIT/H3_INIT_EXT patterns, UBSAN cleanliness, stock-macros-on-ext behavior, cross-boundary isolation, mask coverage, field survival (base cell, mode), single-evaluation safety
+- Conclusion: The 128-bit bit layout is correct and all 14 Group C macros work as specified. Macros are safe to drop into h3Index.h. POC-2/3/4 may proceed.
