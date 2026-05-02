@@ -179,10 +179,14 @@ H3Error H3_EXPORT(constructCell)(int res, int baseCellNumber, const int *digits,
 H3Error H3_EXPORT(stringToH3)(const char *str, H3Index *out) {
     H3Index h = H3_NULL;
     // If failed, h will be unmodified and we should return H3_NULL anyways.
-    int read = sscanf(str, "%" PRIx64, &h);
+    // H3-EXTENDED: stock-only 16-char hex parse; scan into uint64 intermediate
+    // and zero-extend. Phase C will widen for 32-char hex (ext cell support).
+    uint64_t low = 0;
+    int read = sscanf(str, "%" PRIx64, &low);
     if (read != 1) {
         return E_FAILED;
     }
+    h = (H3Index)low;
     *out = h;
     return E_SUCCESS;
 }
@@ -200,7 +204,9 @@ H3Error H3_EXPORT(h3ToString)(H3Index h, char *str, size_t sz) {
         // Buffer is potentially not large enough.
         return E_MEMORY_BOUNDS;
     }
-    sprintf(str, "%" PRIx64, h);
+    // H3-EXTENDED: stock-only 16-char hex output (low 64 bits only).
+    // Phase C will widen to 32-char hex with proper ext-cell support.
+    sprintf(str, "%" PRIx64, (uint64_t)h);
     return E_SUCCESS;
 }
 
@@ -282,11 +288,16 @@ static inline bool _hasAll7AfterRes(H3Index h, int res) {
     if (res < 15) {
         int shift = 19 + 3 * res;
 
-        h = ~h;
-        h <<= shift;
-        h >>= shift;
+        // H3-EXTENDED: stock bit-magic window-clears bits above (64 - shift).
+        // Under __uint128_t, the window naturally extends to bits 0..(127-shift),
+        // pulling in inverted high-half bits and breaking validation. Phase E
+        // (playbook §6.4) widens to also check ext digits 16-22; for now, restrict
+        // the bit-magic to the low 64 bits so stock cells validate identically.
+        uint64_t lo = ~(uint64_t)h;
+        lo <<= shift;
+        lo >>= shift;
 
-        return h == 0;
+        return lo == 0;
     }
     return true;
 }
@@ -326,11 +337,17 @@ first 1 bit isn't divisible by 3.
 */
 static inline bool _hasDeletedSubsequence(H3Index h, int base_cell) {
     if (isBaseCellPentagonArr[base_cell]) {
-        h <<= 19;
-        h >>= 19;
+        // H3-EXTENDED: stock bit-magic windows low 45 bits in 64-bit world.
+        // Under __uint128_t, the window keeps low 109 bits, so the leading-1
+        // search picks up mode/res metadata in bits 45-63 instead of digit
+        // bits. Restrict to uint64 to preserve stock behavior; Phase E
+        // (playbook §6.5) widens to also walk ext digits via H3_GET_DIGIT_AT_RES.
+        uint64_t lo = (uint64_t)h;
+        lo <<= 19;
+        lo >>= 19;
 
-        if (h == 0) return false;  // all zeros: res 15 pentagon
-        return _firstOneIndex(h) % 3 == 0;
+        if (lo == 0) return false;  // all zeros: res 15 pentagon
+        return _firstOneIndex(lo) % 3 == 0;
     }
     return false;
 }

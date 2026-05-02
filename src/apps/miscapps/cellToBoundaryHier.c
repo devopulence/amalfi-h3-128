@@ -147,7 +147,7 @@ int main(int argc, char *argv[]) {
         } else {
             kmlName = calloc(BUFF_SIZE, sizeof(char));
 
-            sprintf(kmlName, "Cell %" PRIx64 " Res %d", parentIndex,
+            sprintf(kmlName, "Cell %" PRIx64 " Res %d", (uint64_t)parentIndex,
                     ((res <= rootRes) ? rootRes : res));
         }
 

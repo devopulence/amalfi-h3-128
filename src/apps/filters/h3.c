@@ -197,7 +197,7 @@ SUBCOMMAND(latLngToCell,
     }
 
     if (strcmp(format, "json") == 0 || strcmp(format, "") == 0) {
-        printf("\"%" PRIx64 "\"\n", c);
+        printf("\"%" PRIx64 "\"\n", (uint64_t)c);
     } else if (strcmp(format, "newline") == 0) {
         h3Println(c);
     } else {
@@ -399,7 +399,7 @@ SUBCOMMAND(constructCell,
     }
 
     if (strcmp(format, "json") == 0 || strcmp(format, "") == 0) {
-        printf("\"%" PRIx64 "\"\n", out);
+        printf("\"%" PRIx64 "\"\n", (uint64_t)out);
     } else if (strcmp(format, "newline") == 0) {
         h3Println(out);
     } else {
@@ -429,13 +429,15 @@ SUBCOMMAND(stringToInt, "Converts an H3 index in string form to integer form") {
         free(rawCell);
         return err;
     }
-    printf("%" PRIu64 "\n", c);
+    printf("%" PRIu64 "\n", (uint64_t)c);
     free(rawCell);
     return E_SUCCESS;
 }
 
 SUBCOMMAND(intToString, "Converts an H3 index in int form to string form") {
-    H3Index rawCell;
+    // H3-EXTENDED: zero-init so sscanf via args framework (writes only low 64
+    // bits via PRIu64) leaves the high half well-defined as 0 (stock cell).
+    H3Index rawCell = 0;
     Arg rawCellArg = {.names = {"-c", "--cell"},
                       .required = true,
                       .scanFormat = "%" PRIu64,
@@ -618,7 +620,7 @@ SUBCOMMAND(
         for (int64_t i = 0, j = 0; i < len; i++) {
             if (out[i] != 0) {
                 j++;
-                printf("\"%" PRIx64 "\"%s", out[i], j == trueLen ? "" : ", ");
+                printf("\"%" PRIx64 "\"%s", (uint64_t)out[i], j == trueLen ? "" : ", ");
             }
         }
         printf(" ]\n");
@@ -695,7 +697,7 @@ SUBCOMMAND(
             for (int j = 0; j < len; j++) {
                 if (distances[j] == i && out[j] != 0) {
                     cellNum++;
-                    printf("\"%" PRIx64 "\"", out[j]);
+                    printf("\"%" PRIx64 "\"", (uint64_t)out[j]);
                     if (cellNum != count) {
                         printf(", ");
                     }
@@ -765,10 +767,10 @@ SUBCOMMAND(gridRing,
     }
     // Now that we have the correct data, however we got it, we can print it out
     if (strcmp(format, "json") == 0 || strcmp(format, "") == 0) {
-        printf("[ \"%" PRIx64 "\"", out[0]);
+        printf("[ \"%" PRIx64 "\"", (uint64_t)out[0]);
         for (int64_t i = 1; i < len; i++) {
             if (out[i] != 0) {
-                printf(", \"%" PRIx64 "\"", out[i]);
+                printf(", \"%" PRIx64 "\"", (uint64_t)out[i]);
             }
         }
         printf(" ]\n");
@@ -822,10 +824,10 @@ SUBCOMMAND(gridPathCells,
         return err;
     }
     if (strcmp(format, "json") == 0 || strcmp(format, "") == 0) {
-        printf("[ \"%" PRIx64 "\"", out[0]);
+        printf("[ \"%" PRIx64 "\"", (uint64_t)out[0]);
         for (int64_t i = 1; i < len; i++) {
             if (out[i] != 0) {
-                printf(", \"%" PRIx64 "\"", out[i]);
+                printf(", \"%" PRIx64 "\"", (uint64_t)out[i]);
             }
         }
         printf(" ]\n");
@@ -934,7 +936,7 @@ SUBCOMMAND(localIjToCell,
         return err;
     }
     if (strcmp(format, "json") == 0 || strcmp(format, "") == 0) {
-        printf("\"%" PRIx64 "\"\n", out);
+        printf("\"%" PRIx64 "\"\n", (uint64_t)out);
     } else if (strcmp(format, "newline") == 0) {
         h3Println(out);
     } else {
@@ -972,7 +974,7 @@ SUBCOMMAND(cellToParent,
         return err;
     }
     if (strcmp(format, "json") == 0 || strcmp(format, "") == 0) {
-        printf("\"%" PRIx64 "\"\n", parent);
+        printf("\"%" PRIx64 "\"\n", (uint64_t)parent);
     } else if (strcmp(format, "newline") == 0) {
         h3Println(parent);
     } else {
@@ -1030,7 +1032,7 @@ SUBCOMMAND(cellToChildren,
         for (int64_t i = 0, j = 0; i < len; i++) {
             if (out[i] != 0) {
                 j++;
-                printf("\"%" PRIx64 "\"%s", out[i], j == trueLen ? "" : ", ");
+                printf("\"%" PRIx64 "\"%s", (uint64_t)out[i], j == trueLen ? "" : ", ");
             }
         }
         printf(" ]\n");
@@ -1106,7 +1108,7 @@ SUBCOMMAND(
         return err;
     }
     if (strcmp(format, "json") == 0 || strcmp(format, "") == 0) {
-        printf("\"%" PRIx64 "\"\n", centerChild);
+        printf("\"%" PRIx64 "\"\n", (uint64_t)centerChild);
     } else if (strcmp(format, "newline") == 0) {
         h3Println(centerChild);
     } else {
@@ -1177,7 +1179,7 @@ SUBCOMMAND(childPosToCell,
         return err;
     }
     if (strcmp(format, "json") == 0 || strcmp(format, "") == 0) {
-        printf("\"%" PRIx64 "\"\n", child);
+        printf("\"%" PRIx64 "\"\n", (uint64_t)child);
     } else if (strcmp(format, "newline") == 0) {
         h3Println(child);
     } else {
@@ -1210,7 +1212,7 @@ H3Index *readCellsFromFile(FILE *fp, char *buffer, size_t *totalCells) {
             // A valid H3 cell is exactly 15 hexadecomical characters.
             // Determine if we have a match, otherwise increment
             int scanlen = 0;
-            sscanf(buffer + bufferOffset, "%" PRIx64 "%n", &cell, &scanlen);
+            uint64_t _cell_low = 0; sscanf(buffer + bufferOffset, "%" PRIx64 "%n", &_cell_low, &scanlen); cell = (H3Index)_cell_low;
             if (scanlen != 15) {
                 cell = 0;
                 bufferOffset += 1;
@@ -1359,7 +1361,7 @@ SUBCOMMAND(compactCells,
         for (int64_t i = 0, j = 0; i < cellsOffset; i++) {
             if (compactedSet[i] != 0) {
                 j++;
-                printf("\"%" PRIx64 "\"%s", compactedSet[i],
+                printf("\"%" PRIx64 "\"%s", (uint64_t)compactedSet[i],
                        j == trueLen ? "" : ", ");
             }
         }
@@ -1497,7 +1499,7 @@ SUBCOMMAND(uncompactCells,
         for (int64_t i = 0, j = 0; i < uncompactedSize; i++) {
             if (uncompactedSet[i] != 0) {
                 j++;
-                printf("\"%" PRIx64 "\"%s", uncompactedSet[i],
+                printf("\"%" PRIx64 "\"%s", (uint64_t)uncompactedSet[i],
                        j == trueLen ? "" : ", ");
             }
         }
@@ -1781,7 +1783,7 @@ SUBCOMMAND(
         for (int64_t i = 0, j = 0; i < cellsSize; i++) {
             if (cells[i] != 0) {
                 j++;
-                printf("\"%" PRIx64 "\"%s", cells[i], j == trueLen ? "" : ", ");
+                printf("\"%" PRIx64 "\"%s", (uint64_t)cells[i], j == trueLen ? "" : ", ");
             }
         }
         printf(" ]\n");
@@ -2028,7 +2030,9 @@ SUBCOMMAND(areNeighborCells,
            "border)") {
     DEFINE_FORMAT_ARG(
         "'json' for true or false, 'numeric' for 1 or 0 (Default: json)");
-    H3Index origin, destination;
+    // H3-EXTENDED: zero-init so sscanf via args framework (writes only low 64
+    // bits via PRIx64) leaves the high half well-defined as 0 (stock cell).
+    H3Index origin = 0, destination = 0;
     Arg originCellArg = {.names = {"-o", "--origin"},
                          .required = true,
                          .scanFormat = "%" PRIx64,
@@ -2066,7 +2070,9 @@ SUBCOMMAND(cellsToDirectedEdge,
     DEFINE_FORMAT_ARG(
         "'json' for \"CELL\"\\n, 'newline' for CELL\\n "
         "(Default: json)");
-    H3Index origin, destination;
+    // H3-EXTENDED: zero-init so sscanf via args framework (writes only low 64
+    // bits via PRIx64) leaves the high half well-defined as 0 (stock cell).
+    H3Index origin = 0, destination = 0;
     Arg originCellArg = {.names = {"-o", "--origin"},
                          .required = true,
                          .scanFormat = "%" PRIx64,
@@ -2088,7 +2094,7 @@ SUBCOMMAND(cellsToDirectedEdge,
         return err;
     }
     if (strcmp(format, "json") == 0 || strcmp(format, "") == 0) {
-        printf("\"%" PRIx64 "\"\n", out);
+        printf("\"%" PRIx64 "\"\n", (uint64_t)out);
     } else if (strcmp(format, "newline") == 0) {
         h3Println(out);
     } else {
@@ -2129,7 +2135,7 @@ SUBCOMMAND(getDirectedEdgeOrigin,
         return err;
     }
     if (strcmp(format, "json") == 0 || strcmp(format, "") == 0) {
-        printf("\"%" PRIx64 "\"\n", out);
+        printf("\"%" PRIx64 "\"\n", (uint64_t)out);
     } else if (strcmp(format, "newline") == 0) {
         h3Println(out);
     } else {
@@ -2153,7 +2159,7 @@ SUBCOMMAND(getDirectedEdgeDestination,
         return err;
     }
     if (strcmp(format, "json") == 0 || strcmp(format, "") == 0) {
-        printf("\"%" PRIx64 "\"\n", out);
+        printf("\"%" PRIx64 "\"\n", (uint64_t)out);
     } else if (strcmp(format, "newline") == 0) {
         h3Println(out);
     } else {
@@ -2176,9 +2182,9 @@ SUBCOMMAND(
         return err;
     }
     if (strcmp(format, "json") == 0 || strcmp(format, "") == 0) {
-        printf("[\"%" PRIx64 "\", \"%" PRIx64 "\"]\n", out[0], out[1]);
+        printf("[\"%" PRIx64 "\", \"%" PRIx64 "\"]\n", (uint64_t)out[0], (uint64_t)out[1]);
     } else if (strcmp(format, "newline") == 0) {
-        printf("%" PRIx64 "\n%" PRIx64 "\n", out[0], out[1]);
+        printf("%" PRIx64 "\n%" PRIx64 "\n", (uint64_t)out[0], (uint64_t)out[1]);
     } else {
         return E_FAILED;
     }
@@ -2211,7 +2217,7 @@ SUBCOMMAND(originToDirectedEdges,
                 if (hasPrinted) {
                     printf(", ");
                 }
-                printf("\"%" PRIx64 "\"", out[i]);
+                printf("\"%" PRIx64 "\"", (uint64_t)out[i]);
                 hasPrinted = true;
             }
         }
@@ -2304,7 +2310,7 @@ SUBCOMMAND(cellToVertex,
         return err;
     }
     if (strcmp(format, "json") == 0 || strcmp(format, "") == 0) {
-        printf("\"%" PRIx64 "\"\n", out);
+        printf("\"%" PRIx64 "\"\n", (uint64_t)out);
     } else if (strcmp(format, "newline") == 0) {
         h3Println(out);
     } else {
@@ -2346,7 +2352,7 @@ SUBCOMMAND(cellToVertexes,
         for (int64_t i = 0, j = 0; i < 6; i++) {
             if (out[i] != 0) {
                 j++;
-                printf("\"%" PRIx64 "\"%s", out[i], j == trueLen ? "" : ", ");
+                printf("\"%" PRIx64 "\"%s", (uint64_t)out[i], j == trueLen ? "" : ", ");
             }
         }
         printf(" ]\n");
@@ -2692,7 +2698,7 @@ SUBCOMMAND(getRes0Cells, "Returns all of the resolution 0 cells") {
         for (int64_t i = 0, j = 0; i < 122; i++) {
             if (out[i] != 0) {
                 j++;
-                printf("\"%" PRIx64 "\"%s", out[i], j == trueLen ? "" : ", ");
+                printf("\"%" PRIx64 "\"%s", (uint64_t)out[i], j == trueLen ? "" : ", ");
             }
         }
         printf(" ]\n");
@@ -2744,7 +2750,7 @@ SUBCOMMAND(getPentagons,
         for (int64_t i = 0, j = 0; i < 12; i++) {
             if (out[i] != 0) {
                 j++;
-                printf("\"%" PRIx64 "\"%s", out[i], j == trueLen ? "" : ", ");
+                printf("\"%" PRIx64 "\"%s", (uint64_t)out[i], j == trueLen ? "" : ", ");
             }
         }
         printf(" ]\n");

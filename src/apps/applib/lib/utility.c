@@ -39,12 +39,14 @@ void error(const char *msg) {
 /**
  * Prints the H3Index
  */
-void h3Print(H3Index h) { printf("%" PRIx64, h); }
+// H3-EXTENDED: print stock low 64 bits only; Phase C will widen to 32-char hex.
+void h3Print(H3Index h) { printf("%" PRIx64, (uint64_t)h); }
 
 /**
  * Prints the H3Index and a newline
  */
-void h3Println(H3Index h) { printf("%" PRIx64 "\n", h); }
+// H3-EXTENDED: print stock low 64 bits only; Phase C will widen to 32-char hex.
+void h3Println(H3Index h) { printf("%" PRIx64 "\n", (uint64_t)h); }
 
 /**
  * Prints the CoordIJK

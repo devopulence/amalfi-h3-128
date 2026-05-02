@@ -46,38 +46,42 @@
 /** The number of bits in a single H3 resolution digit. */
 #define H3_PER_DIGIT_OFFSET 3
 
+// H3-EXTENDED: masks retyped from uint64_t to H3Index (__uint128_t) so that
+// the negated forms (~MASK) and ANDs with H3Index preserve the high 64 bits.
+// Bit values are unchanged — only the C type widens.
+
 /** 1 in the highest bit, 0's everywhere else. */
-#define H3_HIGH_BIT_MASK ((uint64_t)(1) << H3_MAX_OFFSET)
+#define H3_HIGH_BIT_MASK ((H3Index)(1) << H3_MAX_OFFSET)
 
 /** 0 in the highest bit, 1's everywhere else. */
 #define H3_HIGH_BIT_MASK_NEGATIVE (~H3_HIGH_BIT_MASK)
 
 /** 1's in the 4 mode bits, 0's everywhere else. */
-#define H3_MODE_MASK ((uint64_t)(15) << H3_MODE_OFFSET)
+#define H3_MODE_MASK ((H3Index)(15) << H3_MODE_OFFSET)
 
 /** 0's in the 4 mode bits, 1's everywhere else. */
 #define H3_MODE_MASK_NEGATIVE (~H3_MODE_MASK)
 
 /** 1's in the 7 base cell bits, 0's everywhere else. */
-#define H3_BC_MASK ((uint64_t)(127) << H3_BC_OFFSET)
+#define H3_BC_MASK ((H3Index)(127) << H3_BC_OFFSET)
 
 /** 0's in the 7 base cell bits, 1's everywhere else. */
 #define H3_BC_MASK_NEGATIVE (~H3_BC_MASK)
 
 /** 1's in the 4 resolution bits, 0's everywhere else. */
-#define H3_RES_MASK (UINT64_C(15) << H3_RES_OFFSET)
+#define H3_RES_MASK ((H3Index)(15) << H3_RES_OFFSET)
 
 /** 0's in the 4 resolution bits, 1's everywhere else. */
 #define H3_RES_MASK_NEGATIVE (~H3_RES_MASK)
 
 /** 1's in the 3 reserved bits, 0's everywhere else. */
-#define H3_RESERVED_MASK ((uint64_t)(7) << H3_RESERVED_OFFSET)
+#define H3_RESERVED_MASK ((H3Index)(7) << H3_RESERVED_OFFSET)
 
 /** 0's in the 3 reserved bits, 1's everywhere else. */
 #define H3_RESERVED_MASK_NEGATIVE (~H3_RESERVED_MASK)
 
 /** 1's in the 3 bits of res 15 digit bits, 0's everywhere else. */
-#define H3_DIGIT_MASK ((uint64_t)(7))
+#define H3_DIGIT_MASK ((H3Index)(7))
 
 /** 0's in the 7 base cell bits, 1's everywhere else. */
 #define H3_DIGIT_MASK_NEGATIVE (~H3_DIGIT_MASK)
@@ -87,7 +91,7 @@
  * Typically used to initialize the creation of an H3 cell index, which
  * expects all direction digits to be 7 beyond the cell's resolution.
  */
-#define H3_INIT (UINT64_C(35184372088831))
+#define H3_INIT ((H3Index)UINT64_C(35184372088831))
 
 /**
  * Gets the highest bit of the H3 index.
@@ -163,6 +167,81 @@
                        << ((MAX_H3_RES - (res)) * H3_PER_DIGIT_OFFSET)))) | \
             (((uint64_t)(digit))                                            \
              << ((MAX_H3_RES - (res)) * H3_PER_DIGIT_OFFSET)))
+
+// H3-EXTENDED: Group C macros for ext bits 64-127 (playbook §3, validated by
+// POC-1, 685/685 assertions ASAN+UBSAN clean). Copied verbatim from
+// poc1_bit_layout.c. MAX_H3_EXT_RES is defined in constants.h (Group C #1).
+
+/* C2: H3_EXT_FLAG_OFFSET — bit position of ext flag */
+#define H3_EXT_FLAG_OFFSET 64
+
+/* C3: H3_EXT_FLAG_MASK — single-bit mask at position 64 */
+#define H3_EXT_FLAG_MASK ((__uint128_t)1 << 64)
+
+/* C4: H3_EXT_DIGITS_OFFSET — bit position of ext digit 16 */
+#define H3_EXT_DIGITS_OFFSET 65
+
+/* C5: H3_EXT_DIGITS_MASK — 7 ext digits × 3 bits = 21 bits starting at bit 65 */
+#define H3_EXT_DIGITS_MASK ((((__uint128_t)1 << 21) - 1) << 65)
+
+/* C6: H3_INIT_EXT — init pattern with ext flag set, all digits (1-22) = sentinel 7.
+ *     Low 64 bits = H3_INIT (digits 1-15 = 7).
+ *     Bit 64 = 1 (ext flag).
+ *     Bits 65-85 = all 1s (ext digits 16-22 = 7).
+ *     Bits 86-127 = 0 (reserved). */
+#define H3_INIT_EXT (H3_INIT | H3_EXT_FLAG_MASK | H3_EXT_DIGITS_MASK)
+
+/* C7: H3_GET_EXT_FLAG — returns 0 or 1 */
+#define H3_GET_EXT_FLAG(h) \
+    ((int)(((h) & H3_EXT_FLAG_MASK) >> H3_EXT_FLAG_OFFSET))
+
+/* C8: H3_SET_EXT_FLAG */
+#define H3_SET_EXT_FLAG(h, v)             \
+    (h) = (((h) & ~H3_EXT_FLAG_MASK) |    \
+           (((__uint128_t)(v)) << H3_EXT_FLAG_OFFSET))
+
+/* C9: H3_GET_EFFECTIVE_RESOLUTION — returns 0-22 */
+#define H3_GET_EFFECTIVE_RESOLUTION(h) \
+    (H3_GET_RESOLUTION(h) + (H3_GET_EXT_FLAG(h) << 4))
+
+/* C10: H3_SET_EFFECTIVE_RESOLUTION — atomic write of stock-res field + ext flag.
+ *      GCC statement-expression for single evaluation of `res` (POC-1 PF-19). */
+#define H3_SET_EFFECTIVE_RESOLUTION(h, res)         \
+    ({                                              \
+        int _r = (res);                             \
+        H3_SET_RESOLUTION((h), (_r) & 0xF);         \
+        H3_SET_EXT_FLAG((h), (_r) >= 16 ? 1 : 0);   \
+    })
+
+/* C11: H3_GET_EXT_INDEX_DIGIT — UB if res not in [16, 22]. Caller's responsibility. */
+#define H3_GET_EXT_INDEX_DIGIT(h, res)                                       \
+    ((int)(((h) >> (H3_EXT_DIGITS_OFFSET + ((res) - 16) * 3)) & H3_DIGIT_MASK))
+
+/* C12: H3_SET_EXT_INDEX_DIGIT — UB if res not in [16, 22]. */
+#define H3_SET_EXT_INDEX_DIGIT(h, res, digit)                                       \
+    (h) = (((h) & ~((__uint128_t)H3_DIGIT_MASK                                      \
+                    << (H3_EXT_DIGITS_OFFSET + ((res) - 16) * 3))) |                \
+           (((__uint128_t)(digit))                                                  \
+            << (H3_EXT_DIGITS_OFFSET + ((res) - 16) * 3)))
+
+/* C13: H3_GET_DIGIT_AT_RES — dispatching getter. Use when res is unknown-range. */
+#define H3_GET_DIGIT_AT_RES(h, res)                                  \
+    ((res) <= MAX_H3_RES ? H3_GET_INDEX_DIGIT((h), (res))            \
+                         : H3_GET_EXT_INDEX_DIGIT((h), (res)))
+
+/* C14: H3_SET_DIGIT_AT_RES — dispatching setter. Replaces H3_SET_INDEX_DIGIT
+ *      at every site whose res argument may exceed 15 at runtime. */
+#define H3_SET_DIGIT_AT_RES(h, res, digit)                  \
+    do {                                                    \
+        if ((res) <= MAX_H3_RES)                            \
+            H3_SET_INDEX_DIGIT((h), (res), (digit));        \
+        else                                                \
+            H3_SET_EXT_INDEX_DIGIT((h), (res), (digit));    \
+    } while (0)
+
+// H3-EXTENDED: gate A1 — sizeof(H3Index) must be 16 bytes (128-bit).
+_Static_assert(sizeof(H3Index) == 16,
+               "H3-Extended: H3Index must be 16 bytes (__uint128_t)");
 
 void setH3Index(H3Index *h, int res, int baseCell, Direction initDigit);
 int isResolutionClassIII(int r);

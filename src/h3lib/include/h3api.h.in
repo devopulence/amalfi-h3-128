@@ -64,9 +64,17 @@ extern "C" {
 
 /** @brief Identifier for an object (cell, edge, etc) in the H3 system.
  *
- * The H3Index fits within a 64-bit unsigned integer.
+ * H3-EXTENDED: H3Index is widened to 128 bits to support effective
+ * resolutions 16-22 (~1cm to ~0.4mm). Bits 0-63 are byte-identical to
+ * stock H3 v4.4.1 with the high half zeroed, preserving compatibility
+ * for resolutions 0-15. Bit 64 is the ext flag, bits 65-85 hold ext
+ * digits 16-22, bits 86-127 are reserved (must be zero in MVP).
  */
-typedef uint64_t H3Index;
+// H3-EXTENDED: requires __uint128_t (GCC/Clang). MSVC unsupported — see playbook §9.1.
+#ifndef __SIZEOF_INT128__
+#error "H3-Extended requires __uint128_t; compile with GCC, Clang, or use MinGW/WSL on Windows."
+#endif
+typedef __uint128_t H3Index;
 
 /**
  * Invalid index used to indicate an error from latLngToCell and related

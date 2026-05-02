@@ -110,7 +110,7 @@ void doCell(H3Index h, int maxK, TestOutput *testOutput) {
             if (!foundPent) {
                 // Failed to find the pentagon that caused gridDiskUnsafe
                 // to fail.
-                printf("NO C k=%d h=%" PRIx64 "\n", k, h);
+                printf("NO C k=%d h=%" PRIx64 "\n", k, (uint64_t)h);
                 testOutput->ret1ValidationFailures++;
                 return;
             }
