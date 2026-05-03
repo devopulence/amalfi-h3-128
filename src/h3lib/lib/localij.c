@@ -133,9 +133,14 @@ const bool FAILED_DIRECTIONS[7][7] = {
  * @return 0 on success, or another value on failure.
  */
 H3Error cellToLocalIjk(H3Index origin, H3Index h3, CoordIJK *out) {
-    int res = H3_GET_RESOLUTION(origin);
+    // H3-EXTENDED: Rule LB — use effective resolution for both origin
+    // and the index being looked up. For two ext cells with matching
+    // effective resolution, the equality check holds; for an ext+stock
+    // mismatch the check correctly returns E_RES_MISMATCH (different
+    // effective resolutions). Trap §6.15.
+    int res = H3_GET_EFFECTIVE_RESOLUTION(origin);
 
-    if (res != H3_GET_RESOLUTION(h3)) {
+    if (res != H3_GET_EFFECTIVE_RESOLUTION(h3)) {
         return E_RES_MISMATCH;
     }
 
@@ -303,7 +308,11 @@ H3Error cellToLocalIjk(H3Index origin, H3Index h3, CoordIJK *out) {
  * @return 0 on success, or another value on failure.
  */
 H3Error localIjkToCell(H3Index origin, const CoordIJK *ijk, H3Index *out) {
-    int res = H3_GET_RESOLUTION(origin);
+    // H3-EXTENDED: Rule LB on origin's effective res; Rule INIT seed
+    // (H3_INIT_EXT for ext output so digits 1-22 hold sentinel 7); Rule RW
+    // on the resolution write so the ext flag is set atomically. Trap
+    // §6.15 / §5.5 / §5.4.
+    int res = H3_GET_EFFECTIVE_RESOLUTION(origin);
     int originBaseCell = H3_GET_BASE_CELL(origin);
     if (NEVER(originBaseCell < 0) || originBaseCell >= NUM_BASE_CELLS) {
         // Base cells less than zero can not be represented in an index
@@ -313,9 +322,9 @@ H3Error localIjkToCell(H3Index origin, const CoordIJK *ijk, H3Index *out) {
 
     // This logic is very similar to faceIjkToH3
     // initialize the index
-    *out = H3_INIT;
+    *out = (res > MAX_H3_RES) ? H3_INIT_EXT : H3_INIT;
     H3_SET_MODE(*out, H3_CELL_MODE);
-    H3_SET_RESOLUTION(*out, res);
+    H3_SET_EFFECTIVE_RESOLUTION(*out, res);
 
     // check for res 0/base cell
     if (res == 0) {
@@ -367,7 +376,9 @@ H3Error localIjkToCell(H3Index origin, const CoordIJK *ijk, H3Index *out) {
         _ijkSub(&lastIJK, &lastCenter, &diff);
         _ijkNormalize(&diff);
 
-        H3_SET_INDEX_DIGIT(*out, r + 1, _unitIjkToDigit(&diff));
+        // H3-EXTENDED: Rule DW — for ext res the loop's r+1 reaches into
+        // 16..22 so the dispatching setter is required (trap §5.3 / §6.15).
+        H3_SET_DIGIT_AT_RES(*out, r + 1, _unitIjkToDigit(&diff));
     }
 
     // ijkCopy should now hold the IJK of the base cell in the
