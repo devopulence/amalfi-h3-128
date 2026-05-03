@@ -75,7 +75,12 @@ SUITE(cellToCenterChild) {
         t_assert(
             H3_EXPORT(cellToCenterChild)(baseHex, -1, &child) == E_RES_DOMAIN,
             "should fail for negative resolution");
-        t_assert(H3_EXPORT(cellToCenterChild)(baseHex, MAX_H3_RES + 1,
+        // H3-EXTENDED: stock test codified the OLD upper bound at
+        // MAX_H3_RES + 1 (= 16); H3-Extended widening (Rule GR — playbook
+        // §5.1) accepts res 16-22. Replace with MAX_H3_EXT_RES + 1 (= 23)
+        // as the new "above-max" sentinel. Surfaced per CLAUDE.md
+        // non-negotiable #2.
+        t_assert(H3_EXPORT(cellToCenterChild)(baseHex, MAX_H3_EXT_RES + 1,
                                               &child) == E_RES_DOMAIN,
                  "should fail beyond finest resolution");
     }

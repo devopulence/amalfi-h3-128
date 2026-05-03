@@ -455,8 +455,14 @@ SUITE(compactCells) {
         t_assert(H3_EXPORT(uncompactCellsSize)(someHexagons, numHex, -1,
                                                &sizeResult) == E_RES_MISMATCH,
                  "uncompactCellsSize fails when given illegal resolutions");
+        // H3-EXTENDED: stock test codified the OLD upper bound at
+        // MAX_H3_RES + 1 (= 16); H3-Extended widening accepts res 16-22 in
+        // the underlying _hasChildAtRes guard. Replace with
+        // MAX_H3_EXT_RES + 1 (= 23) for the new "above-max" sentinel.
+        // Surfaced per CLAUDE.md non-negotiable #2.
         t_assert(
-            H3_EXPORT(uncompactCellsSize)(someHexagons, numHex, MAX_H3_RES + 1,
+            H3_EXPORT(uncompactCellsSize)(someHexagons, numHex,
+                                          MAX_H3_EXT_RES + 1,
                                           &sizeResult) == E_RES_MISMATCH,
             "uncompactCellsSize fails when given resolutions beyond max");
 
@@ -478,8 +484,15 @@ SUITE(compactCells) {
         for (int i = 0; i < numHex; i++) {
             setH3Index(&someHexagons[i], MAX_H3_RES, i, 0);
         }
+        // H3-EXTENDED: stock test codified the OLD upper bound at
+        // MAX_H3_RES + 1 (= 16); H3-Extended widening accepts res 16-22 in
+        // _hasChildAtRes. With MAX_H3_RES + 1 the call would now succeed
+        // and overflow `uncompressed` (3-element stack buffer). Replace
+        // with MAX_H3_EXT_RES + 1 (= 23) for the new "above-max" sentinel.
+        // Surfaced per CLAUDE.md non-negotiable #2.
         uncompactCellsResult = H3_EXPORT(uncompactCells)(
-            someHexagons, numHex, uncompressed, numHex * 7, MAX_H3_RES + 1);
+            someHexagons, numHex, uncompressed, numHex * 7,
+            MAX_H3_EXT_RES + 1);
         t_assert(uncompactCellsResult == E_RES_MISMATCH,
                  "uncompactCells fails when given resolutions beyond max");
     }

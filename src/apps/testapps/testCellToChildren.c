@@ -143,7 +143,11 @@ SUITE(cellToChildren_new) {
 
     TEST(childResTooFine) {
         H3Index h = 0x8f283080dcb0ae2;  // res 15 cell
-        int res = MAX_H3_RES + 1;
+        // H3-EXTENDED: stock test codified the OLD upper bound at
+        // MAX_H3_RES + 1 (= 16); H3-Extended widening accepts res 16-22.
+        // Replace with MAX_H3_EXT_RES + 1 (= 23) for the new "above-max"
+        // sentinel. Surfaced per CLAUDE.md non-negotiable #2.
+        int res = MAX_H3_EXT_RES + 1;
 
         H3Index expected[] = {0};  // empty set; zeros are ignored
 

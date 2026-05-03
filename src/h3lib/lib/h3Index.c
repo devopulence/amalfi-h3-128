@@ -524,8 +524,13 @@ H3Error H3_EXPORT(cellToParent)(H3Index h, int parentRes, H3Index *out) {
  * @return The validity of the child resolution
  */
 static bool _hasChildAtRes(H3Index h, int childRes) {
-    int parentRes = H3_GET_RESOLUTION(h);
-    if (childRes < parentRes || childRes > MAX_H3_RES) {
+    // H3-EXTENDED: Rule LB on parentRes capture; Rule GR on the upper-bound.
+    // Without these, an ext parent would compare childRes against the 4-bit
+    // stock-res field (0-6) and reject most legitimate child requests; an
+    // ext childRes (16-22) would also be rejected by the stock MAX_H3_RES
+    // bound.
+    int parentRes = H3_GET_EFFECTIVE_RESOLUTION(h);
+    if (childRes < parentRes || childRes > MAX_H3_EXT_RES) {
         return false;
     }
     return true;
@@ -543,7 +548,12 @@ static bool _hasChildAtRes(H3Index h, int childRes) {
 H3Error H3_EXPORT(cellToChildrenSize)(H3Index h, int childRes, int64_t *out) {
     if (!_hasChildAtRes(h, childRes)) return E_RES_DOMAIN;
 
-    int n = childRes - H3_GET_RESOLUTION(h);
+    // H3-EXTENDED: Rule LB on the depth arithmetic (trap §6.17). Without
+    // this, an ext parent at effective res 18 with childRes 22 would compute
+    // n = 22 - 2 = 20 (using the 4-bit stock-res field), returning ~7^20
+    // children — allocation explodes. With the effective-res getter, n =
+    // 22 - 18 = 4, returning the correct 7^4 = 2401.
+    int n = childRes - H3_GET_EFFECTIVE_RESOLUTION(h);
 
     if (H3_EXPORT(isPentagon)(h)) {
         *out = 1 + 5 * (_ipow(7, n) - 1) / 6;
@@ -564,9 +574,14 @@ H3Error H3_EXPORT(cellToChildrenSize)(H3Index h, int childRes, int64_t *out) {
  * @return The new H3Index for the child
  */
 H3Index makeDirectChild(H3Index h, int cellNumber) {
-    int childRes = H3_GET_RESOLUTION(h) + 1;
-    H3Index childH = H3_SET_RESOLUTION(h, childRes);
-    H3_SET_INDEX_DIGIT(childH, childRes, cellNumber);
+    // H3-EXTENDED: Rule LB on the resolution arithmetic (trap §6.17); Rule
+    // RW for the resolution write so the ext flag is set atomically when
+    // the new childRes crosses into the ext range; Rule DW so the digit
+    // write dispatches correctly for childRes > 15.
+    int childRes = H3_GET_EFFECTIVE_RESOLUTION(h) + 1;
+    H3Index childH = h;
+    H3_SET_EFFECTIVE_RESOLUTION(childH, childRes);
+    H3_SET_DIGIT_AT_RES(childH, childRes, cellNumber);
     return childH;
 }
 
@@ -617,8 +632,23 @@ H3Index _zeroIndexDigits(H3Index h, int start, int end) {
 H3Error H3_EXPORT(cellToCenterChild)(H3Index h, int childRes, H3Index *child) {
     if (!_hasChildAtRes(h, childRes)) return E_RES_DOMAIN;
 
-    h = _zeroIndexDigits(h, H3_GET_RESOLUTION(h) + 1, childRes);
-    H3_SET_RESOLUTION(h, childRes);
+    // H3-EXTENDED: trap §6.8 — stock implementation reads parent res via
+    // H3_GET_RESOLUTION (returns 4-bit stock-res field; for ext parent at
+    // effective res 18 returns 2, so digit-zero window is wrong by 16) and
+    // writes via H3_SET_RESOLUTION (truncates childRes to 4 bits and leaves
+    // the ext flag clear, producing a malformed "looks like stock res-0"
+    // cell when childRes ≥ 16). Use Group C dispatch on both reads/writes.
+    h = _zeroIndexDigits(h, H3_GET_EFFECTIVE_RESOLUTION(h) + 1, childRes);
+    H3_SET_EFFECTIVE_RESOLUTION(h, childRes);
+    // For ext children, populate the trailing INVALID_DIGIT sentinels at
+    // digits childRes+1..MAX_H3_EXT_RES so the result satisfies
+    // _hasAll7AfterRes. (Stock children: parent's H3_INIT-derived sentinels
+    // at digits 11..15 already cover this; high half stays zero.)
+    if (childRes > MAX_H3_RES) {
+        for (int r = childRes + 1; r <= MAX_H3_EXT_RES; r++) {
+            H3_SET_DIGIT_AT_RES(h, r, INVALID_DIGIT);
+        }
+    }
     *child = h;
     return E_SUCCESS;
 }
