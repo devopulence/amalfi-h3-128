@@ -1248,7 +1248,11 @@ H3Error cellToVec3(H3Index h3, Vec3d *v) {
     if (e) {
         return e;
     }
-    _faceIjkToVec3(&fijk, H3_GET_RESOLUTION(h3), v);
+    // H3-EXTENDED: Rule LB (§5.1) — _hex2dToVec3 rescales radius by
+    // sqrt(7)^-res. Passing stock res (e.g. 3) for an ext cell at res 19
+    // would underweight the rescale by sqrt(7)^16 and place the point
+    // far from its true location.
+    _faceIjkToVec3(&fijk, H3_GET_EFFECTIVE_RESOLUTION(h3), v);
     return E_SUCCESS;
 }
 
