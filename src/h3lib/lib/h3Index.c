@@ -1206,7 +1206,10 @@ H3Error _h3ToFaceIjk(H3Index h, FaceIJK *fijk) {
     CoordIJK origIJK = fijk->coord;
 
     // if we're in Class III, drop into the next finer Class II grid
-    int res = H3_GET_RESOLUTION(h);
+    // H3-EXTENDED: Rule LB (§5.1) — local res must be the effective res
+    // (0-22) so the Class III dispatch is correct for ext cells. The two
+    // post-overage comparisons below also widen for symmetry.
+    int res = H3_GET_EFFECTIVE_RESOLUTION(h);
     if (isResolutionClassIII(res)) {
         // Class III
         _downAp7r(&fijk->coord);
@@ -1225,8 +1228,8 @@ H3Error _h3ToFaceIjk(H3Index h, FaceIJK *fijk) {
                 continue;
         }
 
-        if (res != H3_GET_RESOLUTION(h)) _upAp7r(&fijk->coord);
-    } else if (res != H3_GET_RESOLUTION(h)) {
+        if (res != H3_GET_EFFECTIVE_RESOLUTION(h)) _upAp7r(&fijk->coord);
+    } else if (res != H3_GET_EFFECTIVE_RESOLUTION(h)) {
         fijk->coord = origIJK;
     }
     return E_SUCCESS;
