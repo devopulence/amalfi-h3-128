@@ -970,9 +970,11 @@ H3Index _h3RotatePent60cw(H3Index h) {
  * @param h The H3Index.
  */
 H3Index _h3Rotate60ccw(H3Index h) {
-    for (int r = 1, res = H3_GET_RESOLUTION(h); r <= res; r++) {
-        Direction oldDigit = H3_GET_INDEX_DIGIT(h, r);
-        H3_SET_INDEX_DIGIT(h, r, _rotate60ccw(oldDigit));
+    // H3-EXTENDED: Pattern 3 (Rule LB + DR + DW, trap §6.12) — bound on
+    // effective res; dispatching digit getter/setter for r > 15.
+    for (int r = 1, res = H3_GET_EFFECTIVE_RESOLUTION(h); r <= res; r++) {
+        Direction oldDigit = H3_GET_DIGIT_AT_RES(h, r);
+        H3_SET_DIGIT_AT_RES(h, r, _rotate60ccw(oldDigit));
     }
 
     return h;
@@ -983,8 +985,10 @@ H3Index _h3Rotate60ccw(H3Index h) {
  * @param h The H3Index.
  */
 H3Index _h3Rotate60cw(H3Index h) {
-    for (int r = 1, res = H3_GET_RESOLUTION(h); r <= res; r++) {
-        H3_SET_INDEX_DIGIT(h, r, _rotate60cw(H3_GET_INDEX_DIGIT(h, r)));
+    // H3-EXTENDED: Pattern 3 (Rule LB + DR + DW, trap §6.12).
+    for (int r = 1, res = H3_GET_EFFECTIVE_RESOLUTION(h); r <= res; r++) {
+        Direction oldDigit = H3_GET_DIGIT_AT_RES(h, r);
+        H3_SET_DIGIT_AT_RES(h, r, _rotate60cw(oldDigit));
     }
 
     return h;
