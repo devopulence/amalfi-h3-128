@@ -79,7 +79,10 @@ SUITE(Vec3d) {
         H3Index out;
         t_assert(vec3ToCell(&v, -1, &out) == E_RES_DOMAIN,
                  "negative resolution is rejected");
-        t_assert(vec3ToCell(&v, 16, &out) == E_RES_DOMAIN,
+        // H3-EXTENDED: upper bound widened to MAX_H3_EXT_RES (22). Original
+        // assertion at res=16 codified the stock contract; that contract
+        // changed when vec3ToCell was widened (Rule GR, playbook §5.2).
+        t_assert(vec3ToCell(&v, MAX_H3_EXT_RES + 1, &out) == E_RES_DOMAIN,
                  "resolution above max is rejected");
     }
 

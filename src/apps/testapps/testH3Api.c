@@ -34,8 +34,13 @@ SUITE(h3Api) {
 
         t_assert(H3_EXPORT(latLngToCell)(&anywhere, -1, &h) == E_RES_DOMAIN,
                  "resolution below 0 is invalid");
-        t_assert(H3_EXPORT(latLngToCell)(&anywhere, 16, &h) == E_RES_DOMAIN,
-                 "resolution above 15 is invalid");
+        // H3-EXTENDED: upper bound widened to MAX_H3_EXT_RES (22). The original
+        // assertion at res=16 codified the stock contract; that contract changed
+        // when latLngToCell was widened (Rule GR, playbook §5.2). Test intent
+        // preserved by checking one above the new bound.
+        t_assert(H3_EXPORT(latLngToCell)(&anywhere, MAX_H3_EXT_RES + 1, &h) ==
+                     E_RES_DOMAIN,
+                 "resolution above MAX_H3_EXT_RES is invalid");
     }
 
     TEST(latLngToCell_coord) {

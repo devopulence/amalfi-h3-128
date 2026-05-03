@@ -1095,7 +1095,8 @@ H3Index _faceIjkToH3(const FaceIJK *fijk, int res) {
  * @returns E_SUCCESS (0) on success, another value otherwise
  */
 H3Error H3_EXPORT(latLngToCell)(const LatLng *g, int res, H3Index *out) {
-    if (res < 0 || res > MAX_H3_RES) {
+    // H3-EXTENDED: Rule GR (§5.2) — accept ext resolutions 16-22.
+    if (res < 0 || res > MAX_H3_EXT_RES) {
         return E_RES_DOMAIN;
     }
     if (!isfinite(g->lat) || !isfinite(g->lng)) {
@@ -1118,7 +1119,8 @@ H3Error H3_EXPORT(latLngToCell)(const LatLng *g, int res, H3Index *out) {
  * @returns E_SUCCESS on success, another value otherwise
  */
 H3Error vec3ToCell(const Vec3d *v, int res, H3Index *out) {
-    if (res < 0 || res > MAX_H3_RES) {
+    // H3-EXTENDED: Rule GR (§5.2) — accept ext resolutions 16-22.
+    if (res < 0 || res > MAX_H3_EXT_RES) {
         return E_RES_DOMAIN;
     }
     if (!isfinite(v->x) || !isfinite(v->y) || !isfinite(v->z)) {
