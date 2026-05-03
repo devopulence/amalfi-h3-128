@@ -579,16 +579,14 @@ H3Error H3_EXPORT(cellToChildren)(H3Index h, int childRes, H3Index *children) {
  */
 H3Index _zeroIndexDigits(H3Index h, int start, int end) {
     if (start > end) return h;
-
-    H3Index m = 0;
-
-    m = ~m;
-    m <<= H3_PER_DIGIT_OFFSET * (end - start + 1);
-    m = ~m;
-    m <<= H3_PER_DIGIT_OFFSET * (MAX_H3_RES - end);
-    m = ~m;
-
-    return h & m;
+    // H3-EXTENDED: stock bit-magic shifts by `H3_PER_DIGIT_OFFSET * (MAX_H3_RES - end)`
+    // which is negative when end > 15 — UB (playbook §6.6, POC-3 I1). Replace with
+    // a per-digit loop dispatched through H3_SET_DIGIT_AT_RES; for stock-only
+    // ranges the loop produces a byte-identical result.
+    for (int r = start; r <= end; r++) {
+        H3_SET_DIGIT_AT_RES(h, r, 0);
+    }
+    return h;
 }
 
 /**
