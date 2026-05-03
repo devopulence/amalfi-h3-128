@@ -904,8 +904,11 @@ int H3_EXPORT(isPentagon)(H3Index h) {
  * @return The highest resolution non-zero digit in the H3Index.
  */
 Direction _h3LeadingNonZeroDigit(H3Index h) {
-    for (int r = 1; r <= H3_GET_RESOLUTION(h); r++)
-        if (H3_GET_INDEX_DIGIT(h, r)) return H3_GET_INDEX_DIGIT(h, r);
+    // H3-EXTENDED: Rule LB (§5.1) + Rule DR (§5.3 / trap §6.13) — walk
+    // digits up to effective res so an ext cell whose first non-zero
+    // digit lives in the ext range is detected.
+    for (int r = 1; r <= H3_GET_EFFECTIVE_RESOLUTION(h); r++)
+        if (H3_GET_DIGIT_AT_RES(h, r)) return H3_GET_DIGIT_AT_RES(h, r);
 
     // if we're here it's all 0's
     return CENTER_DIGIT;
