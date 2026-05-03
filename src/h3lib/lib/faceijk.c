@@ -295,46 +295,75 @@ static const int adjacentFaceDir[NUM_ICOSA_FACES][NUM_ICOSA_FACES] = {
      -1, -1, -1, -1, JK, IJ, -1, -1, KI, 0}  // face 19
 };
 
-/** @brief overage distance table */
+/** @brief overage distance table
+ *
+ * H3-EXTENDED: extended from length 17 to 21 to support the post-Class-III
+ * res increment in `_h3ToFaceIjk` for ext cells up to res 19. The Class II
+ * pattern is `maxDimByCIIres[2n] = 2 * 7^n`; Class III entries are -1.
+ * Values 0-16 are stock H3 byte-identical. Indices 17-20 are computed:
+ *   [17] = -1            (Class III)
+ *   [18] = 2 * 7^9       = 80707214
+ *   [19] = -1            (Class III)
+ *   [20] = 2 * 7^10      = 564950498  (still fits in int32)
+ *
+ * Indices 21-22 NOT added: at index 22 the value is 2 * 7^11 = 3954653486
+ * which exceeds INT_MAX. Supporting res 20-22 round-trips requires the
+ * `_adjustOverageClassII` arithmetic to be int64-widened first; that work
+ * is deferred. Until then, the public API rejects nothing but downstream
+ * decode of res >= 20 cells with overage will OOB this table.
+ */
 static const int maxDimByCIIres[] = {
-    2,        // res  0
-    -1,       // res  1
-    14,       // res  2
-    -1,       // res  3
-    98,       // res  4
-    -1,       // res  5
-    686,      // res  6
-    -1,       // res  7
-    4802,     // res  8
-    -1,       // res  9
-    33614,    // res 10
-    -1,       // res 11
-    235298,   // res 12
-    -1,       // res 13
-    1647086,  // res 14
-    -1,       // res 15
-    11529602  // res 16
+    2,         // res  0
+    -1,        // res  1
+    14,        // res  2
+    -1,        // res  3
+    98,        // res  4
+    -1,        // res  5
+    686,       // res  6
+    -1,        // res  7
+    4802,      // res  8
+    -1,        // res  9
+    33614,     // res 10
+    -1,        // res 11
+    235298,    // res 12
+    -1,        // res 13
+    1647086,   // res 14
+    -1,        // res 15
+    11529602,  // res 16
+    -1,        // res 17 (H3-EXTENDED)
+    80707214,  // res 18 (H3-EXTENDED, 2 * 7^9)
+    -1,        // res 19 (H3-EXTENDED)
+    564950498  // res 20 (H3-EXTENDED, 2 * 7^10)
 };
 
-/** @brief unit scale distance table */
+/** @brief unit scale distance table
+ *
+ * H3-EXTENDED: extended from length 17 to 21 (mirrors maxDimByCIIres).
+ * Class II pattern: `unitScaleByCIIres[2n] = 7^n`; Class III entries -1.
+ * Indices 17-20 added; res 21-22 deferred until int64 widening lands.
+ */
 static const int unitScaleByCIIres[] = {
-    1,       // res  0
-    -1,      // res  1
-    7,       // res  2
-    -1,      // res  3
-    49,      // res  4
-    -1,      // res  5
-    343,     // res  6
-    -1,      // res  7
-    2401,    // res  8
-    -1,      // res  9
-    16807,   // res 10
-    -1,      // res 11
-    117649,  // res 12
-    -1,      // res 13
-    823543,  // res 14
-    -1,      // res 15
-    5764801  // res 16
+    1,         // res  0
+    -1,        // res  1
+    7,         // res  2
+    -1,        // res  3
+    49,        // res  4
+    -1,        // res  5
+    343,       // res  6
+    -1,        // res  7
+    2401,      // res  8
+    -1,        // res  9
+    16807,     // res 10
+    -1,        // res 11
+    117649,    // res 12
+    -1,        // res 13
+    823543,    // res 14
+    -1,        // res 15
+    5764801,   // res 16
+    -1,        // res 17 (H3-EXTENDED)
+    40353607,  // res 18 (H3-EXTENDED, 7^9)
+    -1,        // res 19 (H3-EXTENDED)
+    282475249  // res 20 (H3-EXTENDED, 7^10)
 };
 
 // Forward declares to make diff nicer
