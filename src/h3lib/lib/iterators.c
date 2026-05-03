@@ -24,16 +24,22 @@
 #include "h3Index.h"
 
 // extract the `res` digit (0--7) of the current cell
+// H3-EXTENDED: Rule DR (POC-3 I3) — dispatch via H3_GET_DIGIT_AT_RES so res
+// values 16-22 read from the ext bits in the high half.
 static int _getResDigit(IterCellsChildren *it, int res) {
-    return H3_GET_INDEX_DIGIT(it->h, res);
+    return H3_GET_DIGIT_AT_RES(it->h, res);
 }
 
 // increment the digit (0--7) at location `res`
-// H3_PER_DIGIT_OFFSET == 3
+// H3-EXTENDED: trap §6.10. Stock body computes `val <<= H3_PER_DIGIT_OFFSET *
+// (MAX_H3_RES - res)`, which is a negative shift count when res > 15 — UB.
+// POC-3 I2 pattern: read d, write d+1 via dispatching macros. Caller (the
+// iterStepChild carry loop) explicitly zeros the overflowed digit before
+// recursing; the bit-add carry semantic that the stock body relied on is
+// replaced by that explicit zero+recurse.
 static void _incrementResDigit(IterCellsChildren *it, int res) {
-    H3Index val = 1;
-    val <<= H3_PER_DIGIT_OFFSET * (MAX_H3_RES - res);
-    it->h += val;
+    int d = H3_GET_DIGIT_AT_RES(it->h, res);
+    H3_SET_DIGIT_AT_RES(it->h, res, d + 1);
 }
 
 /**
@@ -221,15 +227,36 @@ IterCellsChildren iterInitParent(H3Index h, int childRes) {
  * Internal function - initialize a parent iterator in-place
  */
 void _iterInitParent(H3Index h, int childRes, IterCellsChildren *iter) {
-    iter->_parentRes = H3_GET_RESOLUTION(h);
+    // H3-EXTENDED: Rule LB on _parentRes capture (POC-3 I4) — for ext parents
+    // _parentRes must be the effective resolution, not the 4-bit stock-res
+    // field; Rule GR on the upper-bound guard (MAX_H3_RES → MAX_H3_EXT_RES);
+    // Rule RW on the resolution write so the ext flag is set atomically with
+    // the stock-res field for ext childRes.
+    iter->_parentRes = H3_GET_EFFECTIVE_RESOLUTION(h);
 
-    if (childRes < iter->_parentRes || childRes > MAX_H3_RES || h == H3_NULL) {
+    if (childRes < iter->_parentRes || childRes > MAX_H3_EXT_RES ||
+        h == H3_NULL) {
         *iter = _null_iter();
         return;
     }
 
     iter->h = _zeroIndexDigits(h, iter->_parentRes + 1, childRes);
-    H3_SET_RESOLUTION(iter->h, childRes);
+    H3_SET_EFFECTIVE_RESOLUTION(iter->h, childRes);
+
+    // H3-EXTENDED: when childRes is in the ext range, populate trailing
+    // INVALID_DIGIT sentinels at digits childRes+1..MAX_H3_EXT_RES so the
+    // emitted cell satisfies _hasAll7AfterRes. For stock parents the high
+    // half is zero (no ext digits to clear); for ext parents, _zeroIndexDigits
+    // only zeros up to childRes — digits childRes+1..22 retain the parent's
+    // sentinels (already 7), which is also the desired state. The loop below
+    // is therefore safe in both ext sub-cases (idempotent when sentinels are
+    // already in place). For stock children (childRes ≤ 15) we MUST NOT
+    // touch the high half — leave the stock-cell layout as it is.
+    if (childRes > MAX_H3_RES) {
+        for (int r = childRes + 1; r <= MAX_H3_EXT_RES; r++) {
+            H3_SET_DIGIT_AT_RES(iter->h, r, INVALID_DIGIT);
+        }
+    }
 
     if (H3_EXPORT(isPentagon)(iter->h)) {
         // The skip digit skips `1` for pentagons.
@@ -251,45 +278,65 @@ void iterStepChild(IterCellsChildren *it) {
     // once h == H3_NULL, the iterator returns an infinite sequence of H3_NULL
     if (it->h == H3_NULL) return;
 
-    int childRes = H3_GET_RESOLUTION(it->h);
+    // H3-EXTENDED: Rule LB on childRes capture; Pattern 3 (POC-3 I5) state
+    // machine. The widened _incrementResDigit (POC-3 I2) is `set digit+1`
+    // only — it does NOT do bit-add carry across digit boundaries (which
+    // would not work cleanly across the stock/ext word boundary anyway).
+    // Caller (this loop) performs explicit zero on overflow then recurses
+    // with another _incrementResDigit on the next-higher digit. For stock
+    // cells the produced enumeration is identical to the bit-add carry's
+    // (verified by ctest stock 316 byte-identity).
+    int childRes = H3_GET_EFFECTIVE_RESOLUTION(it->h);
 
-    _incrementResDigit(it, childRes);
+    // H3-EXTENDED: when the iterator spans zero levels (childRes ==
+    // _parentRes), the initial emission from _iterInitParent was the only
+    // child (the parent itself). The stock loop happened to return null
+    // immediately because the for-loop's first check is `i == _parentRes`;
+    // our while-loop carries the carry-detection condition until after a
+    // bump, so we need an explicit guard here. POC-3 I5 has the same guard
+    // (poc3_iterator.c:236-240).
+    if (childRes <= it->_parentRes) {
+        *it = _null_iter();
+        return;
+    }
 
-    for (int i = childRes; i >= it->_parentRes; i--) {
-        if (i == it->_parentRes) {
-            // if we're modifying the parent resolution digit, then we're done
-            *it = _null_iter();
-            return;
-        }
+    int r = childRes;
+    _incrementResDigit(it, r);
+
+    while (1) {
+        int d = _getResDigit(it, r);
 
         // PENTAGON_SKIPPED_DIGIT == 1
-        if (i == it->_skipDigit &&
-            _getResDigit(it, i) == PENTAGON_SKIPPED_DIGIT) {
-            // Then we are iterating through the children of a pentagon cell.
-            // All children of a pentagon have the property that the first
-            // nonzero digit between the parent and child resolutions is
-            // not 1.
-            // I.e., we never see a sequence like 00001.
-            // Thus, we skip the `1` in this digit.
-            _incrementResDigit(it, i);
+        if (r == it->_skipDigit && d == PENTAGON_SKIPPED_DIGIT) {
+            // Iterating through the children of a pentagon cell — skip the
+            // `1` digit at the current skip position. The skip position
+            // moves up one digit each time we cross it via carry.
+            _incrementResDigit(it, r);
             it->_skipDigit -= 1;
             return;
         }
 
-        // INVALID_DIGIT == 7
-        if (_getResDigit(it, i) == INVALID_DIGIT) {
-            _incrementResDigit(
-                it, i);  // zeros out it[i] and increments it[i-1] by 1
-        } else {
-            break;
+        // d == valid digit (0..6) — current child found, return.
+        if (d != INVALID_DIGIT) return;
+
+        // d == INVALID_DIGIT (7): overflow at this digit. Carry to next-higher.
+        if (r == it->_parentRes + 1) {
+            // Carry would propagate past the iterator's domain — done.
+            *it = _null_iter();
+            return;
         }
+        H3_SET_DIGIT_AT_RES(it->h, r, 0);
+        r--;
+        _incrementResDigit(it, r);
     }
 }
 
 // create iterator for children of base cell at given resolution
 IterCellsChildren iterInitBaseCellNum(int baseCellNum, int childRes) {
+    // H3-EXTENDED: Rule GR — relax the upper bound to MAX_H3_EXT_RES so that
+    // base-cell-rooted iterators can descend into ext resolutions.
     if (baseCellNum < 0 || baseCellNum >= NUM_BASE_CELLS || childRes < 0 ||
-        childRes > MAX_H3_RES) {
+        childRes > MAX_H3_EXT_RES) {
         return _null_iter();
     }
 
