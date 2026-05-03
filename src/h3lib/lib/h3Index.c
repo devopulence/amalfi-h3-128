@@ -922,14 +922,15 @@ H3Index _h3RotatePent60ccw(H3Index h) {
     // rotate in place; skips any leading 1 digits (k-axis)
 
     int foundFirstNonZeroDigit = 0;
-    for (int r = 1, res = H3_GET_RESOLUTION(h); r <= res; r++) {
+    // H3-EXTENDED: Pattern 3 (Rule LB + DR + DW, trap §6.12).
+    for (int r = 1, res = H3_GET_EFFECTIVE_RESOLUTION(h); r <= res; r++) {
         // rotate this digit
-        H3_SET_INDEX_DIGIT(h, r, _rotate60ccw(H3_GET_INDEX_DIGIT(h, r)));
+        H3_SET_DIGIT_AT_RES(h, r, _rotate60ccw(H3_GET_DIGIT_AT_RES(h, r)));
 
         // look for the first non-zero digit so we
         // can adjust for deleted k-axes sequence
         // if necessary
-        if (!foundFirstNonZeroDigit && H3_GET_INDEX_DIGIT(h, r) != 0) {
+        if (!foundFirstNonZeroDigit && H3_GET_DIGIT_AT_RES(h, r) != 0) {
             foundFirstNonZeroDigit = 1;
 
             // adjust for deleted k-axes sequence
@@ -948,14 +949,15 @@ H3Index _h3RotatePent60cw(H3Index h) {
     // rotate in place; skips any leading 1 digits (k-axis)
 
     int foundFirstNonZeroDigit = 0;
-    for (int r = 1, res = H3_GET_RESOLUTION(h); r <= res; r++) {
+    // H3-EXTENDED: Pattern 3 (Rule LB + DR + DW, trap §6.12).
+    for (int r = 1, res = H3_GET_EFFECTIVE_RESOLUTION(h); r <= res; r++) {
         // rotate this digit
-        H3_SET_INDEX_DIGIT(h, r, _rotate60cw(H3_GET_INDEX_DIGIT(h, r)));
+        H3_SET_DIGIT_AT_RES(h, r, _rotate60cw(H3_GET_DIGIT_AT_RES(h, r)));
 
         // look for the first non-zero digit so we
         // can adjust for deleted k-axes sequence
         // if necessary
-        if (!foundFirstNonZeroDigit && H3_GET_INDEX_DIGIT(h, r) != 0) {
+        if (!foundFirstNonZeroDigit && H3_GET_DIGIT_AT_RES(h, r) != 0) {
             foundFirstNonZeroDigit = 1;
 
             // adjust for deleted k-axes sequence
