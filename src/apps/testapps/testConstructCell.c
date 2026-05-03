@@ -109,8 +109,11 @@ SUITE(constructCell) {
              .digits = {5, 1, 6, 3, 1, 1, 1, 4, 4, 5, 5, 3, 3, 3, 0}},
 
             // tests around resolution
-            {.res = 16, .bc = 0, .digits = {}, .x = E_RES_DOMAIN},
-            {.res = 18, .bc = 0, .digits = {}, .x = E_RES_DOMAIN},
+            // H3-EXTENDED: original assertions at res=16 / res=18 codified the
+            // stock contract; widened to MAX_H3_EXT_RES (22). Test intent
+            // ("oversize res rejected") preserved at the new bound.
+            {.res = MAX_H3_EXT_RES + 1, .bc = 0, .digits = {}, .x = E_RES_DOMAIN},
+            {.res = MAX_H3_EXT_RES + 3, .bc = 0, .digits = {}, .x = E_RES_DOMAIN},
             {.res = -1, .bc = 0, .digits = {}, .x = E_RES_DOMAIN},
             {.res = 0, .bc = 0, .digits = {}, .x = 0x8001fffffffffff},
 

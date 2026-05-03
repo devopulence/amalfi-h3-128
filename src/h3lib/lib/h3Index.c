@@ -142,16 +142,20 @@ H3Error H3_EXPORT(getIndexDigit)(H3Index h, int res, int *out) {
  **/
 H3Error H3_EXPORT(constructCell)(int res, int baseCellNumber, const int *digits,
                                  H3Index *out) {
-    if (res < 0 || res > MAX_H3_RES) {
+    // H3-EXTENDED: Rule GR (§5.2) — accept ext resolutions 16-22.
+    if (res < 0 || res > MAX_H3_EXT_RES) {
         return E_RES_DOMAIN;
     }
     if (baseCellNumber < 0 || baseCellNumber >= NUM_BASE_CELLS) {
         return E_BASE_CELL_DOMAIN;
     }
 
-    H3Index h = H3_INIT;
+    // H3-EXTENDED: Rule INIT (§5.5) — ext path seeds digits 1-22 to sentinel 7
+    // via H3_INIT_EXT; stock path keeps H3_INIT byte-identical.
+    H3Index h = (res > MAX_H3_RES) ? H3_INIT_EXT : H3_INIT;
     H3_SET_MODE(h, H3_CELL_MODE);
-    H3_SET_RESOLUTION(h, res);
+    // H3-EXTENDED: Rule RW (§5.4) — atomic res field + ext flag write.
+    H3_SET_EFFECTIVE_RESOLUTION(h, res);
     H3_SET_BASE_CELL(h, baseCellNumber);
 
     bool isPentagon = isBaseCellPentagonArr[baseCellNumber];
@@ -171,7 +175,8 @@ H3Error H3_EXPORT(constructCell)(int res, int baseCellNumber, const int *digits,
                 isPentagon = false;
             }
         }
-        H3_SET_INDEX_DIGIT(h, r, d);
+        // H3-EXTENDED: Rule DW (§5.3) — dispatching digit setter for r > 15.
+        H3_SET_DIGIT_AT_RES(h, r, d);
     }
 
     *out = h;
