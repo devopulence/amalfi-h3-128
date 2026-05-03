@@ -120,10 +120,12 @@ int H3_EXPORT(getBaseCellNumber)(H3Index h) { return H3_GET_BASE_CELL(h); }
  * @return 0 (E_SUCCESS) on success, or another value otherwise.
  */
 H3Error H3_EXPORT(getIndexDigit)(H3Index h, int res, int *out) {
-    if (res < 1 || res > MAX_H3_RES) {
+    // H3-EXTENDED: Rule GR (§5.2) + Rule DR (§5.3). Public API now accepts
+    // res 1-22 and dispatches digit access (stock vs ext bit positions).
+    if (res < 1 || res > MAX_H3_EXT_RES) {
         return E_RES_DOMAIN;
     }
-    *out = H3_GET_INDEX_DIGIT(h, res);
+    *out = H3_GET_DIGIT_AT_RES(h, res);
     return E_SUCCESS;
 }
 

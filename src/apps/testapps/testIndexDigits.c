@@ -52,8 +52,12 @@ SUITE(indexDigits) {
                  "negative resolution");
         t_assert(H3_EXPORT(getIndexDigit)(h, 0, &digitUnused) == E_RES_DOMAIN,
                  "zero resolution");
-        t_assert(H3_EXPORT(getIndexDigit)(h, 16, &digitUnused) == E_RES_DOMAIN,
-                 "too high resolution");
+        // H3-EXTENDED: upper bound widened to MAX_H3_EXT_RES (22). Original
+        // assertion at res=16 codified the stock contract; that contract
+        // changed when getIndexDigit was widened (Rule GR, playbook §5.2).
+        t_assert(H3_EXPORT(getIndexDigit)(h, MAX_H3_EXT_RES + 1, &digitUnused) ==
+                     E_RES_DOMAIN,
+                 "too high resolution (above MAX_H3_EXT_RES)");
     }
 
     TEST(getIndexDigitForSetCell) {
