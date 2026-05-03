@@ -1146,7 +1146,11 @@ H3Error vec3ToCell(const Vec3d *v, int res, H3Index *out) {
  */
 int _h3ToFaceIjkWithInitializedFijk(H3Index h, FaceIJK *fijk) {
     CoordIJK *ijk = &fijk->coord;
-    int res = H3_GET_RESOLUTION(h);
+    // H3-EXTENDED: Rule LB (§5.1) — walk digits up to effective res, not
+    // stock res. For an ext cell at res 19 the stock-res field holds 3;
+    // without the dispatch the loop terminates at digit 3 and ext digits
+    // 4-19 are silently dropped from the IJK traversal.
+    int res = H3_GET_EFFECTIVE_RESOLUTION(h);
 
     // center base cell hierarchy is entirely on this face
     int possibleOverage = 1;
@@ -1164,7 +1168,9 @@ int _h3ToFaceIjkWithInitializedFijk(H3Index h, FaceIJK *fijk) {
             _downAp7r(ijk);
         }
 
-        _neighbor(ijk, H3_GET_INDEX_DIGIT(h, r));
+        // H3-EXTENDED: Rule DR (§5.3) — dispatching digit getter for r > 15
+        // (stock H3_GET_INDEX_DIGIT does a negative shift, UB).
+        _neighbor(ijk, H3_GET_DIGIT_AT_RES(h, r));
     }
 
     return possibleOverage;
