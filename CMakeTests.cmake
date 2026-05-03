@@ -268,6 +268,9 @@ add_h3_test(testDecoderExt src/apps/testapps/testDecoderExt.c)
 add_h3_test(testRotationExt src/apps/testapps/testRotationExt.c)
 # H3-EXTENDED Phase D3: public accessor gate (getResolution effective-res).
 add_h3_test(testAccessorExt src/apps/testapps/testAccessorExt.c)
+# H3-EXTENDED Phase D4: hierarchy + iterator gates (cellToParent,
+# cellToChildren, cellToCenterChild, cellToChildrenSize, iter parity).
+add_h3_test(testHierarchyExt src/apps/testapps/testHierarchyExt.c)
 add_h3_test(testMathExtensionsInternal
             src/apps/testapps/testMathExtensionsInternal.c)
 add_h3_test(testDescribeH3Error src/apps/testapps/testDescribeH3Error.c)
