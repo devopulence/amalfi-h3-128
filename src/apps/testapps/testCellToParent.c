@@ -51,7 +51,16 @@ SUITE(cellToParent) {
                  "Invalid resolution fails");
         t_assert(H3_EXPORT(cellToParent)(child, 15, &parent) == E_RES_MISMATCH,
                  "Invalid resolution fails");
-        t_assert(H3_EXPORT(cellToParent)(child, 16, &parent) == E_RES_DOMAIN,
+        // H3-EXTENDED: stock test codifies the OLD upper bound (res ≥ 16
+        // returns E_RES_DOMAIN); the H3-Extended widening of cellToParent
+        // (Rule GR — playbook §5.1) accepts ext resolutions 16-22. Replace
+        // the `16` literal with the new "above-max" sentinel
+        // MAX_H3_EXT_RES + 1 so the test continues to verify the
+        // out-of-domain rejection at the new bound. Surfaced per CLAUDE.md
+        // non-negotiable #2 before bundling with the cellToParent widening
+        // commit.
+        t_assert(H3_EXPORT(cellToParent)(
+                     child, MAX_H3_EXT_RES + 1, &parent) == E_RES_DOMAIN,
                  "Invalid resolution fails");
     }
 }

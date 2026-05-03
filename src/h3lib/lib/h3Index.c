@@ -481,8 +481,16 @@ void setH3Index(H3Index *hp, int res, int baseCell, Direction initDigit) {
  * @param out Output: H3Index of the parent
  */
 H3Error H3_EXPORT(cellToParent)(H3Index h, int parentRes, H3Index *out) {
-    int childRes = H3_GET_RESOLUTION(h);
-    if (parentRes < 0 || parentRes > MAX_H3_RES) {
+    // H3-EXTENDED: Rule LB on childRes capture; Rule GR on the upper-bound
+    // guard; Rule RW on the resolution write; Rule DW on the per-digit
+    // sentinel writes (trap §6.7). For ext children whose parent is a stock
+    // cell (parentRes ≤ 15), the high half must be cleared entirely — bit 64
+    // (ext flag) is cleared by H3_SET_EFFECTIVE_RESOLUTION but the ext digit
+    // bits 65-85 retain the child's path digits, which is invalid layout for
+    // a stock cell (see playbook §2 / §6.1: ext flag clear ⇒ entire high
+    // half must be zero). Mask to low 64 bits in that case.
+    int childRes = H3_GET_EFFECTIVE_RESOLUTION(h);
+    if (parentRes < 0 || parentRes > MAX_H3_EXT_RES) {
         return E_RES_DOMAIN;
     } else if (parentRes > childRes) {
         return E_RES_MISMATCH;
@@ -490,9 +498,17 @@ H3Error H3_EXPORT(cellToParent)(H3Index h, int parentRes, H3Index *out) {
         *out = h;
         return E_SUCCESS;
     }
-    H3Index parentH = H3_SET_RESOLUTION(h, parentRes);
-    for (int i = parentRes + 1; i <= childRes; i++) {
-        H3_SET_INDEX_DIGIT(parentH, i, H3_DIGIT_MASK);
+    H3Index parentH = h;
+    H3_SET_EFFECTIVE_RESOLUTION(parentH, parentRes);
+    if (parentRes <= MAX_H3_RES) {
+        // Stock parent: scrub the entire high half (ext flag + ext digits +
+        // reserved). The Rule DW loop below then re-establishes the
+        // sentinel-7 low-half digits parentRes+1..15.
+        parentH &= 0xFFFFFFFFFFFFFFFFULL;
+    }
+    int sentinelEnd = (parentRes <= MAX_H3_RES) ? MAX_H3_RES : MAX_H3_EXT_RES;
+    for (int i = parentRes + 1; i <= sentinelEnd; i++) {
+        H3_SET_DIGIT_AT_RES(parentH, i, H3_DIGIT_MASK);
     }
     *out = parentH;
     return E_SUCCESS;
