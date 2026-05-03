@@ -266,6 +266,8 @@ add_h3_test(testEncoderExt src/apps/testapps/testEncoderExt.c)
 add_h3_test(testDecoderExt src/apps/testapps/testDecoderExt.c)
 # H3-EXTENDED Phase D6: rotation gate (six rotations restore original).
 add_h3_test(testRotationExt src/apps/testapps/testRotationExt.c)
+# H3-EXTENDED Phase D3: public accessor gate (getResolution effective-res).
+add_h3_test(testAccessorExt src/apps/testapps/testAccessorExt.c)
 add_h3_test(testMathExtensionsInternal
             src/apps/testapps/testMathExtensionsInternal.c)
 add_h3_test(testDescribeH3Error src/apps/testapps/testDescribeH3Error.c)
