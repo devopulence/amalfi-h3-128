@@ -262,6 +262,8 @@ add_h3_test(testStringExt src/apps/testapps/testStringExt.c)
 # H3-EXTENDED Phase D1: encoder gate (latLngToCell, vec3ToCell, _faceIjkToH3,
 # setH3Index) — ext cells produced with bit 64 set, stock cells byte-identical.
 add_h3_test(testEncoderExt src/apps/testapps/testEncoderExt.c)
+# H3-EXTENDED Phase D2: decoder gate (cellToLatLng round-trip + D6 rotation).
+add_h3_test(testDecoderExt src/apps/testapps/testDecoderExt.c)
 add_h3_test(testMathExtensionsInternal
             src/apps/testapps/testMathExtensionsInternal.c)
 add_h3_test(testDescribeH3Error src/apps/testapps/testDescribeH3Error.c)
