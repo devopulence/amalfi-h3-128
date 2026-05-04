@@ -167,6 +167,69 @@ Five existing stock tests directly codified the OLD upper-resolution bound by li
 
 ---
 
+## Session 4 Implementation Files (Phases D7 + E + F + G + H on `feat/h3-128-mvp` — MVP COMPLETE, tag `v0.1.0-128bit-mvp`)
+
+H3 source tree edits and additions delivered by Session 4. Each landed under ASAN+UBSAN with the pre-commit hook running the full ctest suite (323 → 324 → 325 → 326 as test suites were added). All Phase D7 + E + F + G + H gates green; 9/10 §11 acceptance criteria PASS (H4 CI matrix pending GitHub Actions on the just-pushed branch).
+
+### FFI shim layer (Phase D7 — Pattern 4 mandatory)
+
+| File | Created/Modified | Description |
+|------|------------------|-------------|
+| `src/h3lib/include/h3ExtShim.h` | 2026-05-04 — created | D7: 10 FFI shim function prototypes adapted from `poc4_shim.h`. Pulls `H3Index` typedef + `H3Error` enum from `h3api.h` instead of redeclaring. `DECLSPEC` for symbol export. Plus `h3_ext_sizeof_h3index` / `h3_ext_alignof_h3index` cross-TU consistency probes. Per playbook §7: by-pointer convention because `__uint128_t` lacks a stable register-passing ABI. Bundled with `4d9feaa4`. |
+| `src/h3lib/lib/h3ExtShim.c` | 2026-05-04 — created | D7: implementations delegate to real (widened) H3 entry points. NULL-pointer args return E_FAILED. cell_to_children calls cellToChildrenSize internally to populate count. sizeof/alignof probes use `__alignof__` (GCC/Clang extension, C99-safe; `<stdalign.h>` is C11). Bundled with `4d9feaa4`. |
+| `src/apps/testapps/testFFIShimExt.c` | 2026-05-04 — created | Phase D7-G1/G2/G3 + NULL-contract gate suite (1038 assertions, 4 TEST blocks). G1: 10 shim functions linkable + smoke through each entry point. G2: sizeof(H3Index) == 16 and __alignof__(H3Index) == 16 consistent across test TU and shim TU (POC-4 ABI verification). G3: 1,000 random ext cells string-round-trip byte-identical at FFI boundary. NULL contract: all 11 entry points return E_FAILED on NULL. d7g1 `is_valid_cell` assertion loosened to `valid == 0 || valid == 1` because semantic ext-cell validity depends on Phase E (E1's `_hasGoodTopBits` widening) — D7's gate is linkability + ABI, not semantic validity. Bundled with `4d9feaa4`. |
+
+### Multi-phase H3 source edits (Session 4 — E1-E5 + F1 in h3Index.c)
+
+The single file `src/h3lib/lib/h3Index.c` received 6 commits across Phase E (5 widenings + 1 stock contract) and Phase F (1 widening bundle). Consolidated description below.
+
+| File | Created/Modified | Description |
+|------|------------------|-------------|
+| `src/h3lib/lib/h3Index.c` | 2026-05-04 — modified (Session 4) | **E1** (`59a4949d`) `_hasGoodTopBits` (split low/high check per playbook §6.1; stock low-half preserved verbatim, high-half: ext flag clear ⇒ all bits 64-127 zero, ext flag set ⇒ bits 86-127 zero AND stock-res ≤ 6). **E2** (`61e3ce54`) `_firstOneIndex` (high-half-first dispatch per §6.2; removed `static inline` for external linkage matching `_h3Rotate60ccw` convention; all three branches: GCC/clang clzll, MSVC _BitScanReverse64, portable fallback). **E3** (`92481108`) `_hasAny7UptoRes` (stock bit-magic over low-64 digit window for digits 1..min(res,15) + ext loop for res > 15; cast h to uint64_t for stock window stays in low half). **E4** (`943fcb51`) `_hasAll7AfterRes` (per-digit loop dispatching via H3_GET_DIGIT_AT_RES; max_pos = MAX_H3_EXT_RES if ext flag, else MAX_H3_RES; replaces Phase A partial-guard cast). **E5** (`80f2f8ee`) `_hasDeletedSubsequence` (per-digit walk through 1..effective_res via H3_GET_DIGIT_AT_RES) + `isValidCell` local res capture (Rule LB: H3_GET_RESOLUTION → H3_GET_EFFECTIVE_RESOLUTION; stock cells unchanged because eff_res == stock_res when ext flag clear). **F1** (`198649d3`) `cellToBoundary` (2 sites Rule LB switching to H3_GET_EFFECTIVE_RESOLUTION), `getIcosahedronFaces` (Rule LB; isResolutionClassIII parity-stable), `getPentagons` (Rule GR widened to MAX_H3_EXT_RES). After E1+E2+E3+E4+E5, isValidCell now end-to-end validates ext cells. F4 isResClassIII NO widening — playbook §6.14 confirms parity preserved (16 even). |
+
+### Stock test contract updates (Session 4 — 2 sites)
+
+Two existing tests directly codified the OLD upper-resolution bound and were flipped by the F1 widening. Per CLAUDE.md non-negotiable #2 ("if compatibility must break, STOP and surface"), each was surfaced and updated to use `MAX_H3_EXT_RES + 1` as the new "above max" sentinel.
+
+| File | Created/Modified | Description |
+|------|------------------|-------------|
+| `src/apps/testapps/testPentagonIndexes.c` | 2026-05-04 — modified | Stock test contract update at line 61: `getPentagons(16, h3Indexes) == E_RES_DOMAIN` → `getPentagons(MAX_H3_EXT_RES + 1, h3Indexes) == E_RES_DOMAIN`. Bundled with the F widening commit (`198649d3`). |
+| `tests/cli/getPentagons.txt` | 2026-05-04 — modified | Stock test contract update at line 6 (CLI shell-test fixture mirroring the same boundary): `add_h3_cli_test(testCliDontGetPentagons "getPentagons -r 20 ...` → `-r 23`. Initially missed this in the unit-test fix, surfaced as a 2nd ctest red. Bundled with `198649d3`. |
+
+### New ext test suites (Session 4 — 3 suites)
+
+| File | Created/Modified | Description |
+|------|------------------|-------------|
+| `src/apps/testapps/testValidationExt.c` | 2026-05-04 — created | Phase E1..E7 gate suite (220 assertions, 11 TEST blocks): E1 ext cells across all 7 ext res × 6 base cells must validate; E1 corruption of bits 86 / 127 rejects; E1 stock cell with non-zero high half rejects; E1 stock-res > 6 with ext flag rejects; E2 single-bit sweep all 128 positions; E2 multi-bit leading + h==0 returns -1; E3 1000 valid ext + 1000 corrupted; E4 sentinel 7 at digit 18 of res-22 cell rejects; E5 non-7 at digit 21 of res-19 cell rejects; E5 pentagon K-axis at digit 17 rejects; E6 _zeroIndexDigits direct call across stock/ext boundary (start=11..end=22); E7 _incrementResDigit via cellToChildren ext res 16→17. Pentagon base cells (4, 14, 24, 38, 49, 58, 63, 72, 83, 97, 107, 117) hardcoded since `isBaseCellPentagonArr` is file-local to h3Index.c. Forward-declares `_firstOneIndex` (made non-static in E5). Bundled with `36c56d14`. |
+| `src/apps/testapps/testAuxiliaryExt.c` | 2026-05-04 — created | Phase F1..F4 gate suite (771 assertions, 6 TEST blocks): F1 cellToBoundary res-19 hexagon → 6 finite vertices, lat in [-pi/2, pi/2], lng in [-pi, pi]; F2 getIcosahedronFaces ext hexagon → 1-2 valid faces; F2 ext pentagon limited to maxFaceCount == 5 (full _adjustPentVertOverage walk deferred to coordijk int64 — trips signed-overflow at coordijk.h:132/217/222/223 even at res 19 because pentagon Class III aperture-7 amplifies on top of gnomonic scale); F3 getPentagons returns 12 distinct ext pentagons at every res 16-22; F3 rejects res > MAX_H3_EXT_RES; F4 isResClassIII parity matches (effective_res % 2) at every ext res 16-22 (no widening — auto-passes per §6.14 because 16 is even). Scoped to res 19 per the Session 2 coordijk int32 deferral. Bundled with `841db752`. |
+
+### Audit infrastructure (Phase G)
+
+Phase G deliverable per playbook §13. Lives at `.claude/skills/h3-128-audit/`; required `.gitignore` negation rules to track this subtree while keeping rest of `.claude/` ephemeral.
+
+| File | Created/Modified | Description |
+|------|------------------|-------------|
+| `.claude/skills/h3-128-audit/audit.py` | 2026-05-04 — created | G structural validator. Checks A1 (typedef widened to __uint128_t), A2/A3 (14 Group C macros + MAX_H3_EXT_RES present), D7 (10 FFI shim prototypes in h3ExtShim.h), H6 (pre-commit hook installed/exec/invokes ctest), G2 (mutation manifest covers all 6 widening rules: LB/GR/DW/DR/RW/INIT), G3 (every MAX_H3_RES site in src/h3lib/lib/*.c classified as widened or deferred). Modes: human (default), --quiet (CI silent on success), --json (machine output). Exit 0 = clean, 1 = findings, 2 = infra error. Stateful `_strip_comments` pass tracks `/* */` state across line boundaries to avoid flagging `MAX_H3_RES` in docstrings. `MAX_H3_RES_CLASSIFICATIONS` dict tracks 24 sites: 13 widened (dispatch logic threshold) + 11 deferred (auxiliary stat helpers, polyfill arrays/guard, cellToChildPos at h3Index.c:1676 missed in D4). Bundled with `2aabbdcd`. |
+| `.claude/skills/h3-128-audit/mutations/manifest.json` | 2026-05-04 — created | G2: one mutation per widening rule. Each entry records (rule, file, find, replace, expected_failures). Mappings: LB ↔ cellToBoundary res arg (testAuxiliaryExt::f1); GR ↔ getPentagons guard (testAuxiliaryExt::f3); DW ↔ cellToParent loop (testHierarchyExt + UBSAN); DR ↔ iterators::_getResDigit (testHierarchyExt::d4g6/g7); RW ↔ cellToCenterChild (testHierarchyExt::d4g4 + polyfill cascade); INIT ↔ setH3Index (testEncoderExt::d1g1 + testValidationExt::e3 sentinel-7 violations). Documents which test guards which widening. Bundled with `2aabbdcd`. |
+| `.claude/skills/h3-128-audit/SKILL.md` | 2026-05-04 — created | YAML frontmatter (name, description) + usage doc. Surfaces audit skill in Skill tool listings. Documents G1/G2/G3 gate semantics, the "adding a new MAX_H3_RES site" workflow, and the mutation manifest schema. Bundled with `2aabbdcd`. |
+| `.gitignore` | 2026-05-04 — modified | Added negation rules at line 102-107 for `.claude/skills/h3-128-audit/` subtree only. Original `.claude` ignore rule preserved; rest of `.claude/` (settings, transcripts, agents, other skills) stays ephemeral. Bundled with `2aabbdcd`. |
+
+### Test infrastructure registration (Session 4)
+
+| File | Created/Modified | Description |
+|------|------------------|-------------|
+| `CMakeLists.txt` | 2026-05-04 — modified | LIB_SOURCE_FILES: added `src/h3lib/include/h3ExtShim.h` and `src/h3lib/lib/h3ExtShim.c` so the shim compiles into libh3 (filename unchanged per CLAUDE.md). Bundled with `4d9feaa4`. |
+| `CMakeTests.cmake` | 2026-05-04 — modified | Three new test registrations (in commit order): `add_h3_test(testFFIShimExt ...)` (D7, with `4d9feaa4`); `add_h3_test(testValidationExt ...)` (E, with `36c56d14`); `add_h3_test(testAuxiliaryExt ...)` (F, with `841db752`). Existing Session 1+2+3 registrations unchanged. |
+
+### Session 4 acceptance + checkpoint
+
+| File | Created/Modified | Description |
+|------|------------------|-------------|
+| `SESSION_4_CHECKPOINT.md` | 2026-05-04 — created | Phase H acceptance signoff (commit `6bc988e9`). Records 11 commits, gate-by-gate results (D7-G1/G2/G3, E1-E7, F1-F4, G1-G3, H1-H6), 2 stock test contract changes, 7 surprises/lessons (D7 over-asserts hit Phase E ordering; `_firstOneIndex` linkage flip; stock test fixture pentagon CLI path missed; pentagon-overage UBSAN at res 19 not just 20-22; .claude/ gitignore exception for audit; comment-strip needs multi-line block awareness; pwd persists between Bash tool calls), 10 architectural deferrals (coordijk int64, faceijk length 23, cellToChildPos, compaction, polyfill, edges, vertices, aux stats, B2 MSVC, CI on push), build configuration, next-session entry points (CI watch, v0.2.0 with POC-5, cellToChildPos follow-up). Companion to the annotated tag `v0.1.0-128bit-mvp` (object `d9af5e79`) which carries acceptance summary in the tag message. |
+| `contexts/contexts-may-04-20260504-171340.md` | 2026-05-04 — created | Session 4 final save with all four standard sections (Summary, Files, Open Items, Context Dump) + a top-level "Claude.ai Supervision Session" section capturing the cross-session decisions made in the supervisory chat (D4.2 iterator guard verbatim from POC-3, cellToCenterChild bundled into D4, polyfill stays untouched, stock test contracts to MAX_H3_EXT_RES + 1, Phase A casts removed in E by proper POC-2 patterns, context-management discipline). Captures the campaign scorecard: 4 POCs / 10,067 assertions, 4 sessions / 41 commits, resolutions 0-22, all surfaces validated, max resolution 22 (~0.3cm² cell area). |
+
+---
+
 ## Build Commands
 
 Each POC is built and run independently from the repo root:
