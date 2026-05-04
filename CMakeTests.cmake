@@ -271,6 +271,8 @@ add_h3_test(testAccessorExt src/apps/testapps/testAccessorExt.c)
 # H3-EXTENDED Phase D4: hierarchy + iterator gates (cellToParent,
 # cellToChildren, cellToCenterChild, cellToChildrenSize, iter parity).
 add_h3_test(testHierarchyExt src/apps/testapps/testHierarchyExt.c)
+# H3-EXTENDED Phase D5: localij gate (gridDistance + cellToLocalIj round-trip).
+add_h3_test(testLocalIjExt src/apps/testapps/testLocalIjExt.c)
 add_h3_test(testMathExtensionsInternal
             src/apps/testapps/testMathExtensionsInternal.c)
 add_h3_test(testDescribeH3Error src/apps/testapps/testDescribeH3Error.c)
