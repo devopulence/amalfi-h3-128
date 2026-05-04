@@ -338,15 +338,28 @@ For further notes, see the discussion here:
 https://github.com/uber/h3/pull/496#discussion_r795851046
 */
 static inline bool _hasAny7UptoRes(H3Index h, int res) {
+    // H3-EXTENDED (playbook §6.3, POC-2): stock bit-magic spans only digits
+    // 1-15 (bits 0-44). For ext cells digits 16-22 live in bits 65-85 of
+    // the high half; the bit-magic mask doesn't reach them. Widening:
+    // run stock bit-magic over the low-64 digit window for digits 1..min(res, 15),
+    // then loop-check ext digits 16..res for sentinel 7. Stock cells
+    // (res <= 15) take the bit-magic path only — byte-identical to upstream.
     const uint64_t MHI = 0b100100100100100100100100100100100100100100100;
     const uint64_t MLO = MHI >> 2;
 
-    int shift = 3 * (15 - res);
-    h >>= shift;
-    h <<= shift;
-    h = (h & MHI & (~h - MLO));
+    int stockRes = res > MAX_H3_RES ? MAX_H3_RES : res;
+    uint64_t lo = (uint64_t)h;
+    int shift = 3 * (MAX_H3_RES - stockRes);
+    lo >>= shift;
+    lo <<= shift;
+    if ((lo & MHI & (~lo - MLO)) != 0) return true;
 
-    return h != 0;
+    if (res > MAX_H3_RES) {
+        for (int r = MAX_H3_RES + 1; r <= res; r++) {
+            if (H3_GET_DIGIT_AT_RES(h, r) == INVALID_DIGIT) return true;
+        }
+    }
+    return false;
 }
 
 /* Check that all unused digits after `res` are set to 7 (INVALID_DIGIT).
