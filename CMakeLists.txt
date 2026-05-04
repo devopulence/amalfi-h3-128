@@ -172,6 +172,7 @@ set(LIB_SOURCE_FILES
     src/h3lib/include/adder.h
     src/h3lib/include/area.h
     src/h3lib/include/cellsToMultiPoly.h
+    src/h3lib/include/h3ExtShim.h
     src/h3lib/lib/h3Assert.c
     src/h3lib/lib/algos.c
     src/h3lib/lib/bbox.c
@@ -189,7 +190,8 @@ set(LIB_SOURCE_FILES
     src/h3lib/lib/faceijk.c
     src/h3lib/lib/baseCells.c
     src/h3lib/lib/area.c
-    src/h3lib/lib/cellsToMultiPoly.c)
+    src/h3lib/lib/cellsToMultiPoly.c
+    src/h3lib/lib/h3ExtShim.c)
 set(APP_SOURCE_FILES
     src/apps/applib/include/kml.h
     src/apps/applib/include/benchmark.h
