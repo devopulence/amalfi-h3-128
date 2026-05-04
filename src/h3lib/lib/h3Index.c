@@ -257,17 +257,41 @@ H3Error H3_EXPORT(h3ToString)(H3Index h, char *str, size_t sz) {
 }
 
 /*
-The top 8 bits of any cell should be a specific constant:
+The top 8 bits of the low 64-bit half of any cell should be a specific
+constant:
 
 - The 1 high bit should be `0`
 - The 4 mode bits should be `0001` (H3_CELL_MODE)
 - The 3 reserved bits should be `000`
 
-In total, the top 8 bits should be `0_0001_000`
+In total, the top 8 bits of the low half should be `0_0001_000`.
+
+H3-EXTENDED (playbook §6.1, POC-2): widened to 128-bit. Stock-half check
+is preserved verbatim so res 0-15 cells validate byte-identical to stock.
+High half is checked separately:
+- ext flag clear: entire bits 64-127 must be zero (stock layout invariant).
+- ext flag set:   bits 86-127 must be zero (reserved); stock-res field
+                  must be in [0, 6] (effective res 16-22).
 */
 static inline bool _hasGoodTopBits(H3Index h) {
-    h >>= (64 - 8);
-    return h == 0b00001000;
+    uint64_t low = (uint64_t)h;
+    uint64_t high = (uint64_t)(h >> 64);
+
+    // Stock low-half check — byte-identical to upstream.
+    low >>= (64 - 8);
+    if (low != 0b00001000) return false;
+
+    if (H3_GET_EXT_FLAG(h)) {
+        // Ext cell: bits 86-127 (high-half bits 22+) must be zero.
+        if (high & ~(((uint64_t)1 << 22) - 1)) return false;
+        // Stock-res field must encode an ext effective res in [16, 22],
+        // i.e. raw value in [0, 6].
+        if (H3_GET_RESOLUTION(h) > 6) return false;
+    } else {
+        // Stock cell: entire high half must be zero.
+        if (high != 0) return false;
+    }
+    return true;
 }
 
 /* Check that no digit from 1 to `res` is 7 (INVALID_DIGIT).
