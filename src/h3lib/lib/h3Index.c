@@ -373,24 +373,47 @@ static inline bool _hasAll7AfterRes(H3Index h, int res) {
 }
 
 /*
-Get index of first nonzero bit of an H3Index.
+Get index of first nonzero bit of an H3Index, or -1 if h == 0.
 
-When available, use compiler intrinsics, which should be fast.
-If not available, fall back to a loop.
+When available, use compiler intrinsics, which should be fast. If not
+available, fall back to a loop.
+
+H3-EXTENDED (playbook §6.2, POC-2): widened to 128-bit. Stock
+`__builtin_clzll(h)` truncates the high 64 bits — if the only set bit is
+above bit 63, the cast lands at zero and clzll(0) is UB. The fix is to
+test the high half first and only call clzll on a non-zero word.
 */
 static inline int _firstOneIndex(H3Index h) {
+    uint64_t hi = (uint64_t)(h >> 64);
+    uint64_t lo = (uint64_t)h;
 #if defined(__GNUC__) || defined(__clang__)
-    return 63 - __builtin_clzll(h);
+    if (hi != 0) return 127 - __builtin_clzll(hi);
+    if (lo != 0) return 63 - __builtin_clzll(lo);
+    return -1;
 #elif defined(_MSC_VER) && defined(_M_X64)  // doesn't work on win32
     unsigned long index;
-    _BitScanReverse64(&index, h);
-    return (int)index;
+    if (hi != 0) {
+        _BitScanReverse64(&index, hi);
+        return 64 + (int)index;
+    }
+    if (lo != 0) {
+        _BitScanReverse64(&index, lo);
+        return (int)index;
+    }
+    return -1;
 #else
     // Portable fallback
-    int pos = 63 - 19;
-    H3Index m = 1;
-    while ((h & (m << pos)) == 0) pos--;
-    return pos;
+    if (hi != 0) {
+        int pos = 63;
+        while ((hi & ((uint64_t)1 << pos)) == 0) pos--;
+        return 64 + pos;
+    }
+    if (lo != 0) {
+        int pos = 63;
+        while ((lo & ((uint64_t)1 << pos)) == 0) pos--;
+        return pos;
+    }
+    return -1;
 #endif
 }
 
