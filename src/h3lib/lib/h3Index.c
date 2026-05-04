@@ -1411,12 +1411,14 @@ H3Error H3_EXPORT(cellToBoundary)(H3Index h3, CellBoundary *cb) {
     if (e) {
         return e;
     }
+    // H3-EXTENDED (Rule LB, playbook §6.14): pass effective resolution so
+    // the FaceIJK-to-boundary helpers walk the full ext digit chain. Stock
+    // cells (ext flag 0) get the same value via H3_GET_RESOLUTION fallthrough.
+    int res = H3_GET_EFFECTIVE_RESOLUTION(h3);
     if (H3_EXPORT(isPentagon)(h3)) {
-        _faceIjkPentToCellBoundary(&fijk, H3_GET_RESOLUTION(h3), 0,
-                                   NUM_PENT_VERTS, cb);
+        _faceIjkPentToCellBoundary(&fijk, res, 0, NUM_PENT_VERTS, cb);
     } else {
-        _faceIjkToCellBoundary(&fijk, H3_GET_RESOLUTION(h3), 0, NUM_HEX_VERTS,
-                               cb);
+        _faceIjkToCellBoundary(&fijk, res, 0, NUM_HEX_VERTS, cb);
     }
     return E_SUCCESS;
 }
@@ -1444,7 +1446,11 @@ H3Error H3_EXPORT(maxFaceCount)(H3Index h3, int *out) {
  * @param out Output array. Must be of size maxFaceCount(h3).
  */
 H3Error H3_EXPORT(getIcosahedronFaces)(H3Index h3, int *out) {
-    int res = H3_GET_RESOLUTION(h3);
+    // H3-EXTENDED (Rule LB, playbook §6.14): effective resolution drives the
+    // _faceIjkToVerts / _adjustOverageClassII walks. isResolutionClassIII(res)
+    // is parity-stable across the stock/ext boundary (16 is even) so the
+    // Class II branch fires with the correct semantics for ext cells.
+    int res = H3_GET_EFFECTIVE_RESOLUTION(h3);
     int isPent = H3_EXPORT(isPentagon)(h3);
 
     // We can't use the vertex-based approach here for class II pentagons,
@@ -1532,7 +1538,10 @@ int H3_EXPORT(pentagonCount)(void) { return NUM_PENTAGONS; }
  * @param out Output array. Must be of size pentagonCount().
  */
 H3Error H3_EXPORT(getPentagons)(int res, H3Index *out) {
-    if (res < 0 || res > MAX_H3_RES) {
+    // H3-EXTENDED (Rule GR, playbook §6.14): accept ext resolutions 16-22.
+    // setH3Index (Phase D1 widening) handles ext-init for the per-base-cell
+    // construction below.
+    if (res < 0 || res > MAX_H3_EXT_RES) {
         return E_RES_DOMAIN;
     }
     int i = 0;

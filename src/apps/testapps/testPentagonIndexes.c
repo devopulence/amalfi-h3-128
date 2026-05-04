@@ -58,7 +58,11 @@ SUITE(getPentagons) {
 
     TEST(getPentagonsInvalid) {
         H3Index h3Indexes[PADDED_COUNT] = {0};
-        t_assert(H3_EXPORT(getPentagons)(16, h3Indexes) == E_RES_DOMAIN,
+        // H3-EXTENDED (Phase F, playbook §6.14): the upper-bound guard widened
+        // from MAX_H3_RES to MAX_H3_EXT_RES, so `16` now succeeds. Bump the
+        // out-of-range probe to MAX_H3_EXT_RES + 1.
+        t_assert(H3_EXPORT(getPentagons)(MAX_H3_EXT_RES + 1, h3Indexes) ==
+                     E_RES_DOMAIN,
                  "getPentagons of invalid resolutions fails");
         t_assert(H3_EXPORT(getPentagons)(100, h3Indexes) == E_RES_DOMAIN,
                  "getPentagons of invalid resolutions fails");
