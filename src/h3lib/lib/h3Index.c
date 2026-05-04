@@ -364,23 +364,18 @@ static inline bool _hasAny7UptoRes(H3Index h, int res) {
 
 /* Check that all unused digits after `res` are set to 7 (INVALID_DIGIT).
 
-Bit shift to avoid looping through digits.
+H3-EXTENDED (playbook §6.4, POC-2): stock unconditionally returned true
+for res >= 15, masking ext-cell sentinel violations in digits 16-22.
+Replaced with a per-digit loop dispatching through H3_GET_DIGIT_AT_RES.
+The loop's upper bound is MAX_H3_EXT_RES when the cell carries the ext
+flag, MAX_H3_RES otherwise — so ext cells get checked through digit 22
+and stock cells stop at 15. Replaces the Phase A partial-guard cast.
+At most 22-res iterations; correctness > microseconds (CLAUDE.md).
 */
 static inline bool _hasAll7AfterRes(H3Index h, int res) {
-    // NOTE: res check is needed because we can't shift by 64
-    if (res < 15) {
-        int shift = 19 + 3 * res;
-
-        // H3-EXTENDED: stock bit-magic window-clears bits above (64 - shift).
-        // Under __uint128_t, the window naturally extends to bits 0..(127-shift),
-        // pulling in inverted high-half bits and breaking validation. Phase E
-        // (playbook §6.4) widens to also check ext digits 16-22; for now, restrict
-        // the bit-magic to the low 64 bits so stock cells validate identically.
-        uint64_t lo = ~(uint64_t)h;
-        lo <<= shift;
-        lo >>= shift;
-
-        return lo == 0;
+    int maxPos = H3_GET_EXT_FLAG(h) ? MAX_H3_EXT_RES : MAX_H3_RES;
+    for (int r = res + 1; r <= maxPos; r++) {
+        if (H3_GET_DIGIT_AT_RES(h, r) != INVALID_DIGIT) return false;
     }
     return true;
 }
