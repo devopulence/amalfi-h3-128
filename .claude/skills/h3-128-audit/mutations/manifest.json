@@ -1,0 +1,72 @@
+{
+  "$comment": "H3-Extended mutation manifest — Phase G2 deliverable. Each entry describes a single-line reverse-mutation that, when applied, must cause ctest to go red. Proves the corresponding widening is load-bearing.",
+  "version": "1.0.0",
+  "mutations": [
+    {
+      "id": "LB-cellToBoundary",
+      "rule": "LB",
+      "description": "Loop-bound widening: cellToBoundary uses effective resolution to drive _faceIjk*ToCellBoundary at ext res. Reverting to H3_GET_RESOLUTION makes ext-cell boundaries collapse to the stock-res-field shape.",
+      "file": "src/h3lib/lib/h3Index.c",
+      "find": "int res = H3_GET_EFFECTIVE_RESOLUTION(h3);",
+      "replace": "int res = H3_GET_RESOLUTION(h3);",
+      "expected_failures": ["testAuxiliaryExt::f1_cellToBoundaryExtHexagonRes19"]
+    },
+    {
+      "id": "GR-getPentagons",
+      "rule": "GR",
+      "description": "Guard-relaxation: getPentagons accepts ext res 16-22. Reverting MAX_H3_EXT_RES → MAX_H3_RES rejects ext-res arguments and breaks F3.",
+      "file": "src/h3lib/lib/h3Index.c",
+      "find": "if (res < 0 || res > MAX_H3_EXT_RES) {",
+      "replace": "if (res < 0 || res > MAX_H3_RES) {",
+      "expected_failures": [
+        "testAuxiliaryExt::f3_getPentagonsAtExtRes",
+        "testAuxiliaryExt::f3_getPentagonsRejectsAboveExtMax"
+      ]
+    },
+    {
+      "id": "DW-cellToParentLoop",
+      "rule": "DW",
+      "description": "Digit-write widening: cellToParent's sentinel-7 fill loop uses H3_SET_DIGIT_AT_RES (dispatching). Reverting to H3_SET_INDEX_DIGIT does a negative-shift UB when the sentinel range extends past 15.",
+      "file": "src/h3lib/lib/h3Index.c",
+      "find": "H3_SET_DIGIT_AT_RES(parentH, i, INVALID_DIGIT);",
+      "replace": "H3_SET_INDEX_DIGIT(parentH, i, INVALID_DIGIT);",
+      "expected_failures": ["UBSAN trip + testHierarchyExt G1/G2"]
+    },
+    {
+      "id": "DR-iterGetResDigit",
+      "rule": "DR",
+      "description": "Digit-read widening: iterators.c::_getResDigit dispatches via H3_GET_DIGIT_AT_RES. Reverting to H3_GET_INDEX_DIGIT mis-reads ext digits and breaks D4-G6 / D4-G7.",
+      "file": "src/h3lib/lib/iterators.c",
+      "find": "return H3_GET_DIGIT_AT_RES(it->h, res);",
+      "replace": "return H3_GET_INDEX_DIGIT(it->h, res);",
+      "expected_failures": [
+        "testHierarchyExt::d4g6_recurseToRes22",
+        "testHierarchyExt::d4g7_iteratorParity"
+      ]
+    },
+    {
+      "id": "RW-cellToCenterChild",
+      "rule": "RW",
+      "description": "Resolution-write widening: cellToCenterChild atomically writes both stock-res field and ext flag via H3_SET_EFFECTIVE_RESOLUTION. Reverting to H3_SET_RESOLUTION leaves the ext flag clear, producing the §6.8 half-state cell.",
+      "file": "src/h3lib/lib/h3Index.c",
+      "find": "H3_SET_EFFECTIVE_RESOLUTION(h, childRes);",
+      "replace": "H3_SET_RESOLUTION(h, childRes);",
+      "expected_failures": [
+        "testHierarchyExt::d4g4_cellToCenterChild",
+        "testCellToChildren / testPolyfillInternal regressions"
+      ]
+    },
+    {
+      "id": "INIT-setH3Index",
+      "rule": "INIT",
+      "description": "Ext-init pattern: setH3Index seeds from H3_INIT_EXT for res > 15 so ext digits start at sentinel 7. Reverting to plain H3_INIT leaves ext digits at zero (invalid layout — not sentinel).",
+      "file": "src/h3lib/lib/h3Index.c",
+      "find": "H3Index h = (res > MAX_H3_RES) ? H3_INIT_EXT : H3_INIT;",
+      "replace": "H3Index h = H3_INIT;",
+      "expected_failures": [
+        "testEncoderExt::d1g1_setH3Index_extResWellFormed",
+        "testValidationExt::e3_isValidCellRoundTripExtCells (sentinel-7 violations)"
+      ]
+    }
+  ]
+}
