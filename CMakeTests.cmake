@@ -275,6 +275,8 @@ add_h3_test(testHierarchyExt src/apps/testapps/testHierarchyExt.c)
 add_h3_test(testLocalIjExt src/apps/testapps/testLocalIjExt.c)
 # H3-EXTENDED Phase D7: FFI shim gate — Pattern 4 cross-TU ABI verification.
 add_h3_test(testFFIShimExt src/apps/testapps/testFFIShimExt.c)
+# H3-EXTENDED Phase E: validation predicate gate — E1-E7, isValidCell ext path.
+add_h3_test(testValidationExt src/apps/testapps/testValidationExt.c)
 add_h3_test(testMathExtensionsInternal
             src/apps/testapps/testMathExtensionsInternal.c)
 add_h3_test(testDescribeH3Error src/apps/testapps/testDescribeH3Error.c)
