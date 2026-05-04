@@ -277,6 +277,9 @@ add_h3_test(testLocalIjExt src/apps/testapps/testLocalIjExt.c)
 add_h3_test(testFFIShimExt src/apps/testapps/testFFIShimExt.c)
 # H3-EXTENDED Phase E: validation predicate gate — E1-E7, isValidCell ext path.
 add_h3_test(testValidationExt src/apps/testapps/testValidationExt.c)
+# H3-EXTENDED Phase F: auxiliary-surface gate — F1-F4 (cellToBoundary,
+# getIcosahedronFaces, getPentagons, isResClassIII parity).
+add_h3_test(testAuxiliaryExt src/apps/testapps/testAuxiliaryExt.c)
 add_h3_test(testMathExtensionsInternal
             src/apps/testapps/testMathExtensionsInternal.c)
 add_h3_test(testDescribeH3Error src/apps/testapps/testDescribeH3Error.c)
