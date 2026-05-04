@@ -390,8 +390,12 @@ H3-EXTENDED (playbook §6.2, POC-2): widened to 128-bit. Stock
 `__builtin_clzll(h)` truncates the high 64 bits — if the only set bit is
 above bit 63, the cast lands at zero and clzll(0) is UB. The fix is to
 test the high half first and only call clzll on a non-zero word.
+
+External linkage (matches `_h3Rotate60ccw` etc.) so testValidationExt
+can forward-declare and exercise the E2 CRITICAL gate directly. No
+current in-library caller after the E5 widening of _hasDeletedSubsequence.
 */
-static inline int _firstOneIndex(H3Index h) {
+int _firstOneIndex(H3Index h) {
     uint64_t hi = (uint64_t)(h >> 64);
     uint64_t lo = (uint64_t)h;
 #if defined(__GNUC__) || defined(__clang__)
@@ -437,18 +441,17 @@ We can check that (in the lower 45 = 15*3 bits) the position of the
 first 1 bit isn't divisible by 3.
 */
 static inline bool _hasDeletedSubsequence(H3Index h, int base_cell) {
-    if (isBaseCellPentagonArr[base_cell]) {
-        // H3-EXTENDED: stock bit-magic windows low 45 bits in 64-bit world.
-        // Under __uint128_t, the window keeps low 109 bits, so the leading-1
-        // search picks up mode/res metadata in bits 45-63 instead of digit
-        // bits. Restrict to uint64 to preserve stock behavior; Phase E
-        // (playbook §6.5) widens to also walk ext digits via H3_GET_DIGIT_AT_RES.
-        uint64_t lo = (uint64_t)h;
-        lo <<= 19;
-        lo >>= 19;
-
-        if (lo == 0) return false;  // all zeros: res 15 pentagon
-        return _firstOneIndex(lo) % 3 == 0;
+    if (!isBaseCellPentagonArr[base_cell]) return false;
+    // H3-EXTENDED (playbook §6.5, POC-2): stock bit-magic windowed only the
+    // lower 45 bits — pentagon K-axis violations in ext digits 16-22 slipped
+    // past. Walk digits 1..effective_res via H3_GET_DIGIT_AT_RES dispatch and
+    // return whether the first non-zero digit is K_AXES_DIGIT (= 1).
+    // Replaces the Phase A partial-guard cast.
+    int effRes = H3_GET_EFFECTIVE_RESOLUTION(h);
+    for (int r = 1; r <= effRes; r++) {
+        int d = H3_GET_DIGIT_AT_RES(h, r);
+        if (d == 0) continue;
+        return d == 1;  // K_AXES_DIGIT — pentagon-deleted subsequence
     }
     return false;
 }
@@ -482,8 +485,11 @@ int H3_EXPORT(isValidCell)(H3Index h) {
     */
     if (!_hasGoodTopBits(h)) return false;
 
-    // No need to check resolution; any 4 bits give a valid resolution.
-    const int res = H3_GET_RESOLUTION(h);
+    // H3-EXTENDED (Rule LB, playbook §5.1): use effective resolution so the
+    // digit predicates check the full ext-digit range for ext cells. Stock
+    // cells: H3_GET_EFFECTIVE_RESOLUTION == H3_GET_RESOLUTION (ext flag 0,
+    // shift 0) — byte-identical for res 0-15.
+    const int res = H3_GET_EFFECTIVE_RESOLUTION(h);
 
     // Get base cell number and check that it is valid.
     const int bc = H3_GET_BASE_CELL(h);
