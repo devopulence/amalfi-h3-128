@@ -119,3 +119,11 @@ KML/res*centers.kml
 src/h3lib/include/h3api.h
 src/apps/benchmarks/benchmarkCountries.c
 h3-prof.trace
+
+# POC build artifacts (extensionless Mach-O binaries; not matched by *.exe
+# / *.out / *.o rules). Sources poc{1..5}*.{c,h,md} ARE tracked.
+/poc1_bit_layout
+/poc2_validation
+/poc3_iterator
+/poc4_ffi
+/poc5_coordijk_overflow
