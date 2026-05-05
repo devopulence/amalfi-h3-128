@@ -280,6 +280,8 @@ add_h3_test(testValidationExt src/apps/testapps/testValidationExt.c)
 # H3-EXTENDED Phase F: auxiliary-surface gate — F1-F4 (cellToBoundary,
 # getIcosahedronFaces, getPentagons, isResClassIII parity).
 add_h3_test(testAuxiliaryExt src/apps/testapps/testAuxiliaryExt.c)
+# H3-EXTENDED v0.2.0: CoordIJK int64 widening — res 20-22 round-trip closure.
+add_h3_test(testCoordIjkExtRes src/apps/testapps/testCoordIjkExtRes.c)
 add_h3_test(testMathExtensionsInternal
             src/apps/testapps/testMathExtensionsInternal.c)
 add_h3_test(testDescribeH3Error src/apps/testapps/testDescribeH3Error.c)

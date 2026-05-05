@@ -95,7 +95,12 @@ typedef enum {
     PENTAGON_SKIPPED_DIGIT = K_AXES_DIGIT /* 1 */
 } Direction;
 
-#define INT32_MAX_3 (INT32_MAX / 3)
+/* H3-EXTENDED: int32 → int64 (POC-5). Was INT32_MAX_3 = INT32_MAX/3 to
+ * guard 3*i from overflowing int32 in _upAp7Checked / _upAp7rChecked.
+ * CoordIJK is now int64; INT64_MAX_3 ≈ 3.07e18 — well above any H3 ext
+ * resolution magnitude (worst case 7^11 ≈ 2e9), so the guard becomes
+ * effectively unreachable but is kept for defense against bogus inputs. */
+#define INT64_MAX_3 (INT64_MAX / 3)
 
 /**
  * Sets an IJK coordinate to the specified component values.
@@ -169,7 +174,7 @@ static inline void _ijkScale(CoordIJK *c, int64_t factor) {
  */
 static inline bool _ijkNormalizeCouldOverflow(const CoordIJK *ijk) {
     // Check for the possibility of overflow
-    int max, min;
+    int64_t max, min;
     if (ijk->i > ijk->j) {
         max = ijk->i;
         min = ijk->j;
@@ -182,18 +187,14 @@ static inline bool _ijkNormalizeCouldOverflow(const CoordIJK *ijk) {
         // than max. If min is positive, then max is also positive, and a
         // positive signed integer minus another positive signed integer will
         // not overflow.
-        if (ADD_INT32S_OVERFLOWS(max, min)) {
-            // max + min would overflow
-            return true;
-        }
-        if (SUB_INT32S_OVERFLOWS(0, min)) {
-            // 0 - INT32_MIN would overflow
-            return true;
-        }
-        if (SUB_INT32S_OVERFLOWS(max, min)) {
-            // max - min would overflow
-            return true;
-        }
+        // H3-EXTENDED: ADD/SUB_INT64S_OVERFLOWS test int64 range; the int32
+        // helpers were retained for the stock callers but the CoordIJK
+        // arithmetic is now int64 (POC-5). Use __builtin_*_overflow against
+        // int64_t for a portable, type-correct check.
+        int64_t scratch;
+        if (__builtin_add_overflow(max, min, &scratch)) return true;
+        if (__builtin_sub_overflow((int64_t)0, min, &scratch)) return true;
+        if (__builtin_sub_overflow(max, min, &scratch)) return true;
     }
     return false;
 }
@@ -230,7 +231,7 @@ static inline void _ijkNormalize(CoordIJK *c) {
     }
 
     // remove the min value if needed
-    int min = c->i;
+    int64_t min = c->i;
     if (c->j < min) min = c->j;
     if (c->k < min) min = c->k;
     if (min > 0) {
@@ -247,11 +248,11 @@ static inline void _ijkNormalize(CoordIJK *c) {
  * @param v The 2D cartesian coordinates of the hex center point.
  */
 static inline void _ijkToHex2d(const CoordIJK *h, Vec2d *v) {
-    int i = h->i - h->k;
-    int j = h->j - h->k;
+    int64_t i = h->i - h->k;
+    int64_t j = h->j - h->k;
 
-    v->x = i - 0.5 * j;
-    v->y = j * M_SQRT3_2;
+    v->x = (double)i - 0.5 * (double)j;
+    v->y = (double)j * M_SQRT3_2;
 }
 
 /**
@@ -264,7 +265,7 @@ static inline void _ijkToHex2d(const CoordIJK *h, Vec2d *v) {
 static inline void _hex2dToCoordIJK(const Vec2d *v, CoordIJK *h) {
     double a1, a2;
     double x1, x2;
-    int m1, m2;
+    int64_t m1, m2;
     double r1, r2;
 
     // quantize into the ij system and then normalize
@@ -278,12 +279,12 @@ static inline void _hex2dToCoordIJK(const Vec2d *v, CoordIJK *h) {
     x1 = a1 + x2 / 2.0;
 
     // check if we have the center of a hex
-    m1 = (int)x1;
-    m2 = (int)x2;
+    m1 = (int64_t)x1;
+    m2 = (int64_t)x2;
 
     // otherwise round correctly
-    r1 = x1 - m1;
-    r2 = x2 - m2;
+    r1 = x1 - (double)m1;
+    r2 = x2 - (double)m2;
 
     if (r1 < 0.5) {
         if (r1 < 1.0 / 3.0) {
@@ -336,13 +337,13 @@ static inline void _hex2dToCoordIJK(const Vec2d *v, CoordIJK *h) {
     if (v->x < 0.0) {
         if ((h->j % 2) == 0)  // even
         {
-            long long int axisi = h->j / 2;
-            long long int diff = h->i - axisi;
-            h->i = (int)(h->i - 2.0 * diff);
+            int64_t axisi = h->j / 2;
+            int64_t diff = h->i - axisi;
+            h->i = (int64_t)((double)h->i - 2.0 * (double)diff);
         } else {
-            long long int axisi = (h->j + 1) / 2;
-            long long int diff = h->i - axisi;
-            h->i = (int)(h->i - (2.0 * diff + 1));
+            int64_t axisi = (h->j + 1) / 2;
+            int64_t diff = h->i - axisi;
+            h->i = (int64_t)((double)h->i - (2.0 * (double)diff + 1));
         }
     }
 
@@ -385,35 +386,25 @@ static inline Direction _unitIjkToDigit(const CoordIJK *ijk) {
  */
 static inline H3Error _upAp7Checked(CoordIJK *ijk) {
     // Doesn't need to be checked because i, j, and k must all be non-negative
-    int i = ijk->i - ijk->k;
-    int j = ijk->j - ijk->k;
+    int64_t i = ijk->i - ijk->k;
+    int64_t j = ijk->j - ijk->k;
 
     // <0 is checked because the input must all be non-negative, but some
     // negative inputs are used in unit tests to exercise the below.
-    if (i >= INT32_MAX_3 || j >= INT32_MAX_3 || i < 0 || j < 0) {
-        if (ADD_INT32S_OVERFLOWS(i, i)) {
-            return E_FAILED;
-        }
-        int i2 = i + i;
-        if (ADD_INT32S_OVERFLOWS(i2, i)) {
-            return E_FAILED;
-        }
-        int i3 = i2 + i;
-        if (ADD_INT32S_OVERFLOWS(j, j)) {
-            return E_FAILED;
-        }
-        int j2 = j + j;
-
-        if (SUB_INT32S_OVERFLOWS(i3, j)) {
-            return E_FAILED;
-        }
-        if (ADD_INT32S_OVERFLOWS(i, j2)) {
-            return E_FAILED;
-        }
+    if (i >= INT64_MAX_3 || j >= INT64_MAX_3 || i < 0 || j < 0) {
+        int64_t scratch;
+        if (__builtin_add_overflow(i, i, &scratch)) return E_FAILED;
+        int64_t i2 = i + i;
+        if (__builtin_add_overflow(i2, i, &scratch)) return E_FAILED;
+        int64_t i3 = i2 + i;
+        if (__builtin_add_overflow(j, j, &scratch)) return E_FAILED;
+        int64_t j2 = j + j;
+        if (__builtin_sub_overflow(i3, j, &scratch)) return E_FAILED;
+        if (__builtin_add_overflow(i, j2, &scratch)) return E_FAILED;
     }
 
-    ijk->i = (int)lround(((i * 3) - j) * M_ONESEVENTH);
-    ijk->j = (int)lround((i + (j * 2)) * M_ONESEVENTH);
+    ijk->i = (int64_t)lround(((double)(i * 3) - (double)j) * M_ONESEVENTH);
+    ijk->j = (int64_t)lround(((double)i + (double)(j * 2)) * M_ONESEVENTH);
     ijk->k = 0;
 
     // Expected not to be reachable, because max + min or max - min would need
@@ -433,35 +424,25 @@ static inline H3Error _upAp7Checked(CoordIJK *ijk) {
  */
 static inline H3Error _upAp7rChecked(CoordIJK *ijk) {
     // Doesn't need to be checked because i, j, and k must all be non-negative
-    int i = ijk->i - ijk->k;
-    int j = ijk->j - ijk->k;
+    int64_t i = ijk->i - ijk->k;
+    int64_t j = ijk->j - ijk->k;
 
     // <0 is checked because the input must all be non-negative, but some
     // negative inputs are used in unit tests to exercise the below.
-    if (i >= INT32_MAX_3 || j >= INT32_MAX_3 || i < 0 || j < 0) {
-        if (ADD_INT32S_OVERFLOWS(i, i)) {
-            return E_FAILED;
-        }
-        int i2 = i + i;
-        if (ADD_INT32S_OVERFLOWS(j, j)) {
-            return E_FAILED;
-        }
-        int j2 = j + j;
-        if (ADD_INT32S_OVERFLOWS(j2, j)) {
-            return E_FAILED;
-        }
-        int j3 = j2 + j;
-
-        if (ADD_INT32S_OVERFLOWS(i2, j)) {
-            return E_FAILED;
-        }
-        if (SUB_INT32S_OVERFLOWS(j3, i)) {
-            return E_FAILED;
-        }
+    if (i >= INT64_MAX_3 || j >= INT64_MAX_3 || i < 0 || j < 0) {
+        int64_t scratch;
+        if (__builtin_add_overflow(i, i, &scratch)) return E_FAILED;
+        int64_t i2 = i + i;
+        if (__builtin_add_overflow(j, j, &scratch)) return E_FAILED;
+        int64_t j2 = j + j;
+        if (__builtin_add_overflow(j2, j, &scratch)) return E_FAILED;
+        int64_t j3 = j2 + j;
+        if (__builtin_add_overflow(i2, j, &scratch)) return E_FAILED;
+        if (__builtin_sub_overflow(j3, i, &scratch)) return E_FAILED;
     }
 
-    ijk->i = (int)lround(((i * 2) + j) * M_ONESEVENTH);
-    ijk->j = (int)lround(((j * 3) - i) * M_ONESEVENTH);
+    ijk->i = (int64_t)lround(((double)(i * 2) + (double)j) * M_ONESEVENTH);
+    ijk->j = (int64_t)lround(((double)(j * 3) - (double)i) * M_ONESEVENTH);
     ijk->k = 0;
 
     // Expected not to be reachable, because max + min or max - min would need
@@ -481,11 +462,11 @@ static inline H3Error _upAp7rChecked(CoordIJK *ijk) {
  */
 static inline void _upAp7(CoordIJK *ijk) {
     // convert to CoordIJ
-    int i = ijk->i - ijk->k;
-    int j = ijk->j - ijk->k;
+    int64_t i = ijk->i - ijk->k;
+    int64_t j = ijk->j - ijk->k;
 
-    ijk->i = (int)lround((3 * i - j) * M_ONESEVENTH);
-    ijk->j = (int)lround((i + 2 * j) * M_ONESEVENTH);
+    ijk->i = (int64_t)lround((double)(3 * i - j) * M_ONESEVENTH);
+    ijk->j = (int64_t)lround((double)(i + 2 * j) * M_ONESEVENTH);
     ijk->k = 0;
     _ijkNormalize(ijk);
 }
@@ -498,11 +479,11 @@ static inline void _upAp7(CoordIJK *ijk) {
  */
 static inline void _upAp7r(CoordIJK *ijk) {
     // convert to CoordIJ
-    int i = ijk->i - ijk->k;
-    int j = ijk->j - ijk->k;
+    int64_t i = ijk->i - ijk->k;
+    int64_t j = ijk->j - ijk->k;
 
-    ijk->i = (int)lround((2 * i + j) * M_ONESEVENTH);
-    ijk->j = (int)lround((3 * j - i) * M_ONESEVENTH);
+    ijk->i = (int64_t)lround((double)(2 * i + j) * M_ONESEVENTH);
+    ijk->j = (int64_t)lround((double)(3 * j - i) * M_ONESEVENTH);
     ijk->k = 0;
     _ijkNormalize(ijk);
 }
@@ -769,6 +750,6 @@ static inline void cubeToIjk(CoordIJK *ijk) {
     _ijkNormalize(ijk);
 }
 
-#undef INT32_MAX_3
+#undef INT64_MAX_3
 
 #endif

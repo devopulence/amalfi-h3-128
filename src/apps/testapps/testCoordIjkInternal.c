@@ -51,21 +51,25 @@ SUITE(coordIjkInternal) {
         t_assert(_ijkMatches(&ijk, &i), "Invalid neighbor is self");
     }
 
+    // H3-EXTENDED: contract update per v0.2.0 — CoordIJK widened int → int64.
+    // Overflow guards trigger at int64 limits, not int32. INT32_MAX inputs no
+    // longer overflow; INT64_MAX inputs do. Stock test intent (i + i / i * 3
+    // / j + j / etc. should overflow) preserved at the new bound.
     TEST(_upAp7Checked) {
         CoordIJK ijk;
 
         _setIJK(&ijk, 0, 0, 0);
         t_assertSuccess(_upAp7Checked(&ijk));
-        _setIJK(&ijk, INT32_MAX, 0, 0);
+        _setIJK(&ijk, INT64_MAX, 0, 0);
         t_assert(_upAp7Checked(&ijk) == E_FAILED, "i + i overflows");
-        _setIJK(&ijk, INT32_MAX / 2, 0, 0);
+        _setIJK(&ijk, INT64_MAX / 2, 0, 0);
         t_assert(_upAp7Checked(&ijk) == E_FAILED, "i * 3 overflows");
-        _setIJK(&ijk, 0, INT32_MAX, 0);
+        _setIJK(&ijk, 0, INT64_MAX, 0);
         t_assert(_upAp7Checked(&ijk) == E_FAILED, "j + j overflows");
         // This input should be invalid because j < 0
-        _setIJK(&ijk, INT32_MAX / 3, -2, 0);
+        _setIJK(&ijk, INT64_MAX / 3, -2, 0);
         t_assert(_upAp7Checked(&ijk) == E_FAILED, "(i * 3) - j overflows");
-        _setIJK(&ijk, INT32_MAX / 3, INT32_MAX / 2, 0);
+        _setIJK(&ijk, INT64_MAX / 3, INT64_MAX / 2, 0);
         t_assert(_upAp7Checked(&ijk) == E_FAILED, "i + (j * 2) overflows");
         // This input should be invalid because j < 0
         _setIJK(&ijk, -1, 0, 0);
@@ -77,16 +81,16 @@ SUITE(coordIjkInternal) {
 
         _setIJK(&ijk, 0, 0, 0);
         t_assertSuccess(_upAp7rChecked(&ijk));
-        _setIJK(&ijk, INT32_MAX, 0, 0);
+        _setIJK(&ijk, INT64_MAX, 0, 0);
         t_assert(_upAp7rChecked(&ijk) == E_FAILED, "i + i overflows");
-        _setIJK(&ijk, 0, INT32_MAX, 0);
+        _setIJK(&ijk, 0, INT64_MAX, 0);
         t_assert(_upAp7rChecked(&ijk) == E_FAILED, "j + j overflows");
-        _setIJK(&ijk, 0, INT32_MAX / 2, 0);
+        _setIJK(&ijk, 0, INT64_MAX / 2, 0);
         t_assert(_upAp7rChecked(&ijk) == E_FAILED, "3 * j overflows");
-        _setIJK(&ijk, INT32_MAX / 2, INT32_MAX / 3, 0);
+        _setIJK(&ijk, INT64_MAX / 2, INT64_MAX / 3, 0);
         t_assert(_upAp7rChecked(&ijk) == E_FAILED, "(i * 2) + j overflows");
         // This input should be invalid because i < 0
-        _setIJK(&ijk, -2, INT32_MAX / 3, 0);
+        _setIJK(&ijk, -2, INT64_MAX / 3, 0);
         t_assert(_upAp7rChecked(&ijk) == E_FAILED, "(j * 3) - 1 overflows");
         // This input should be invalid because j < 0
         _setIJK(&ijk, -1, 0, 0);
