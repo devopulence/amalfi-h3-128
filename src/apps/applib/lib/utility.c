@@ -52,7 +52,7 @@ void h3Println(H3Index h) { printf("%" PRIx64 "\n", (uint64_t)h); }
  * Prints the CoordIJK
  */
 void coordIjkPrint(const CoordIJK *c) {
-    printf("[%d, %d, %d]", c->i, c->j, c->k);
+    printf("[%" PRId64 ", %" PRId64 ", %" PRId64 "]", c->i, c->j, c->k);
 }
 
 /**

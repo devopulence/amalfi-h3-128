@@ -44,11 +44,16 @@
  * @brief IJK hexagon coordinates
  *
  * Each axis is spaced 120 degrees apart.
+ *
+ * H3-EXTENDED: widened from int (int32) to int64_t per POC-5. Unblocks
+ * exact arithmetic at extended resolutions 20-22 where 2*7^11 (= maxDim
+ * at res 22) exceeds INT32_MAX. Round-trip closure for ext res 20-22 +
+ * pentagon overage walks at res 19+ depend on this widening.
  */
 typedef struct {
-    int i;  ///< i component
-    int j;  ///< j component
-    int k;  ///< k component
+    int64_t i;  ///< i component
+    int64_t j;  ///< j component
+    int64_t k;  ///< k component
 } CoordIJK;
 
 /** @brief CoordIJK unit vectors corresponding to the 7 H3 digits.
@@ -702,11 +707,11 @@ static inline Direction _rotate60cw(Direction digit) {
  * @param c1 The first set of ijk coordinates.
  * @param c2 The second set of ijk coordinates.
  */
-static inline int ijkDistance(const CoordIJK *c1, const CoordIJK *c2) {
+static inline int64_t ijkDistance(const CoordIJK *c1, const CoordIJK *c2) {
     CoordIJK diff;
     _ijkSub(c1, c2, &diff);
     _ijkNormalize(&diff);
-    CoordIJK absDiff = {abs(diff.i), abs(diff.j), abs(diff.k)};
+    CoordIJK absDiff = {llabs(diff.i), llabs(diff.j), llabs(diff.k)};
     return MAX(absDiff.i, MAX(absDiff.j, absDiff.k));
 }
 
