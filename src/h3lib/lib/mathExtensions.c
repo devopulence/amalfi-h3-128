@@ -32,7 +32,12 @@ int64_t _ipow(int64_t base, int64_t exp) {
     while (exp) {
         if (exp & 1) result *= base;
         exp >>= 1;
-        base *= base;
+        // H3-EXTENDED: skip the final square when the loop is about to
+        // exit. Pre-widening this dead store was harmless for stock res
+        // (exp ≤ 15 → 7^15 fits int64), but ext-res callers can pass
+        // exp = 22 making the trailing 7^32 ≈ 1.1e27 trip UBSAN signed
+        // integer overflow. The squared value is never used.
+        if (exp) base *= base;
     }
 
     return result;

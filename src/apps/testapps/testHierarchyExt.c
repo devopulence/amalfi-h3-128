@@ -410,4 +410,153 @@ SUITE(hierarchyExt) {
         t_assert(iterXor == bulkXor,
                  "iterator and cellToChildren XOR-fold match (same set)");
     }
+
+    // ────────────────────────────────────────────────────────────────────
+    // D4-G8 — cellToChildPos / childPosToCell at ext resolutions.
+    //
+    // Pre-widening, childPosToCell rejected childRes > MAX_H3_RES (15)
+    // with E_RES_DOMAIN, and cellToChildPos read H3_GET_RESOLUTION which
+    // returns the stock-res field for ext cells (giving the wrong answer
+    // for ext children). Post-widening:
+    //   - childPosToCell accepts childRes ∈ [16, MAX_H3_EXT_RES]
+    //   - cellToChildPos uses H3_GET_EFFECTIVE_RESOLUTION
+    //   - both functions dispatch through H3_{GET,SET}_DIGIT_AT_RES so
+    //     ext digit positions 16..22 are read/written correctly.
+    //
+    // Coverage:
+    //   G8a — Domain check: childRes > MAX_H3_EXT_RES still rejected.
+    //   G8b — Hexagon stock-parent → ext-child round-trip across all
+    //         (parentRes, childRes) pairs with parentRes ≤ 15 and
+    //         childRes ∈ [16, 22].
+    //   G8c — Hexagon ext-parent → ext-child round-trip across all
+    //         (parentRes, childRes) pairs with parentRes ∈ [16, 21],
+    //         childRes ∈ [parentRes+1, 22].
+    //   G8d — Pentagon stock-parent → ext-child sweep at res 18 (full
+    //         enumeration of children, each round-trips to its position).
+    //   G8e — Stock res-15 → res-15 byte identity guard (canary that
+    //         the widening did not perturb the stock path).
+    // ────────────────────────────────────────────────────────────────────
+    TEST(d4g8_cellToChildPos_extRes) {
+        // G8a — domain check
+        H3Index dummyParent;
+        setH3Index(&dummyParent, 0, 17, 0);
+        H3Index dummyChild;
+        t_assert(H3_EXPORT(childPosToCell)(0, dummyParent,
+                                           MAX_H3_EXT_RES + 1,
+                                           &dummyChild) == E_RES_DOMAIN,
+                 "childPosToCell rejects childRes > MAX_H3_EXT_RES");
+        t_assert(H3_EXPORT(childPosToCell)(0, dummyParent, -1,
+                                           &dummyChild) == E_RES_DOMAIN,
+                 "childPosToCell still rejects negative childRes");
+
+        // G8b — hexagon stock-parent → ext-child round-trip.
+        // Pick a stable hexagon base cell (17 — has been used throughout
+        // testHierarchyExt for hex parent coverage).
+        for (int parentRes = 0; parentRes <= MAX_H3_RES; parentRes++) {
+            H3Index hexParent;
+            setH3Index(&hexParent, parentRes, 17, 0);
+            for (int childRes = 16; childRes <= MAX_H3_EXT_RES; childRes++) {
+                int64_t numChildren;
+                t_assertSuccess(H3_EXPORT(cellToChildrenSize)(
+                    hexParent, childRes, &numChildren));
+                // Sample 3 positions: first, middle, last.
+                int64_t samplePos[3] = {0, numChildren / 2,
+                                        numChildren - 1};
+                for (int s = 0; s < 3; s++) {
+                    int64_t pos = samplePos[s];
+                    H3Index child;
+                    t_assertSuccess(H3_EXPORT(childPosToCell)(
+                        pos, hexParent, childRes, &child));
+                    t_assert(H3_GET_EFFECTIVE_RESOLUTION(child) == childRes,
+                             "child has expected effective resolution");
+                    int64_t roundtripPos;
+                    t_assertSuccess(H3_EXPORT(cellToChildPos)(
+                        child, parentRes, &roundtripPos));
+                    t_assert(roundtripPos == pos,
+                             "ext hex child round-trips to its position");
+                }
+            }
+        }
+
+        // G8c — ext-parent → ext-child round-trip.
+        // Construct ext parents by walking from a stock res-15 cell down
+        // through cellToCenterChild (which is widened) to the desired ext
+        // res, then exercise childPosToCell/cellToChildPos against it.
+        H3Index hexStock15;
+        setH3Index(&hexStock15, MAX_H3_RES, 17, 0);
+        for (int parentRes = 16; parentRes <= MAX_H3_EXT_RES - 1;
+             parentRes++) {
+            H3Index extParent;
+            t_assertSuccess(H3_EXPORT(cellToCenterChild)(
+                hexStock15, parentRes, &extParent));
+            t_assert(H3_GET_EFFECTIVE_RESOLUTION(extParent) == parentRes,
+                     "ext parent at expected res");
+            for (int childRes = parentRes + 1;
+                 childRes <= MAX_H3_EXT_RES; childRes++) {
+                int64_t numChildren;
+                t_assertSuccess(H3_EXPORT(cellToChildrenSize)(
+                    extParent, childRes, &numChildren));
+                int64_t samplePos[3] = {0, numChildren / 2,
+                                        numChildren - 1};
+                for (int s = 0; s < 3; s++) {
+                    int64_t pos = samplePos[s];
+                    H3Index child;
+                    t_assertSuccess(H3_EXPORT(childPosToCell)(
+                        pos, extParent, childRes, &child));
+                    int64_t roundtripPos;
+                    t_assertSuccess(H3_EXPORT(cellToChildPos)(
+                        child, parentRes, &roundtripPos));
+                    t_assert(roundtripPos == pos,
+                             "ext-from-ext child round-trips");
+                }
+            }
+        }
+
+        // G8d — pentagon stock-parent → ext-child enumeration.
+        // Base cell 4 is a pentagon at res 0.
+        H3Index pentParent;
+        setH3Index(&pentParent, MAX_H3_RES, 4, 0);
+        t_assert(H3_EXPORT(isPentagon)(pentParent),
+                 "base 4 res-15 cell is a pentagon");
+        int64_t pentChildCount;
+        t_assertSuccess(H3_EXPORT(cellToChildrenSize)(pentParent, 18,
+                                                      &pentChildCount));
+        // Pentagon size formula: 1 + 5 * (7^n - 1) / 6, n=3 → 1+5*342/6=286.
+        t_assert(pentChildCount == 286,
+                 "pentagon res-18 child count = 286");
+        // Walk a few sample positions and confirm round-trip.
+        int64_t pentSamples[4] = {0, 1, pentChildCount / 2,
+                                  pentChildCount - 1};
+        for (int s = 0; s < 4; s++) {
+            int64_t pos = pentSamples[s];
+            H3Index child;
+            t_assertSuccess(H3_EXPORT(childPosToCell)(pos, pentParent, 18,
+                                                      &child));
+            t_assert(H3_GET_EFFECTIVE_RESOLUTION(child) == 18,
+                     "pentagon ext child at res 18");
+            int64_t roundtripPos;
+            t_assertSuccess(H3_EXPORT(cellToChildPos)(child, MAX_H3_RES,
+                                                      &roundtripPos));
+            t_assert(roundtripPos == pos,
+                     "pentagon ext child round-trips to its position");
+        }
+
+        // G8e — Stock-only canary: pre-existing stock res-15 → res-15
+        // behavior unchanged. This complements the comprehensive stock
+        // tests in testCellToChildPos.c.
+        H3Index stockCell;
+        setH3Index(&stockCell, MAX_H3_RES, 17, 0);
+        int64_t stockPos;
+        t_assertSuccess(H3_EXPORT(cellToChildPos)(stockCell, MAX_H3_RES,
+                                                  &stockPos));
+        t_assert(stockPos == 0, "stock cell trivially at position 0 "
+                                "of its res-15 'children'");
+        H3Index stockBack;
+        t_assertSuccess(H3_EXPORT(childPosToCell)(0, stockCell, MAX_H3_RES,
+                                                  &stockBack));
+        t_assert(stockBack == stockCell,
+                 "stock res-15 self round-trip byte-identical");
+        t_assert(((uint64_t)(stockBack >> 64)) == 0,
+                 "stock cell high half remains zero");
+    }
 }

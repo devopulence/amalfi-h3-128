@@ -97,8 +97,10 @@ MAX_H3_RES_CLASSIFICATIONS: dict[str, dict[int, str]] = {
         708: "widened",
         # _faceIjkToH3 INIT dispatch
         1127: "widened",
-        # cellToChildPos / childPosToCell guard
-        1676: "deferred:post-mvp",
+        # NOTE: childPosToCell guard at h3Index.c:1681 no longer references
+        # MAX_H3_RES (Rule LB widening 2026-05-05 raised it to MAX_H3_EXT_RES).
+        # The site is therefore not detected by the MAX_H3_RES site scan
+        # and no classification entry is needed.
     },
     "iterators.c": {
         255: "widened",  # iterInitBaseCellNum guard relaxed (D4)

@@ -81,6 +81,17 @@
       ]
     },
     {
+      "id": "LB-childPosToCell",
+      "rule": "LB",
+      "description": "Loop-bound (guard) widening: childPosToCell accepts childRes ∈ [16, MAX_H3_EXT_RES]. Reverting to MAX_H3_RES rejects every ext-resolution caller with E_RES_DOMAIN, breaking D4-G8 ext round-trips.",
+      "file": "src/h3lib/lib/h3Index.c",
+      "find": "if (childRes < 0 || childRes > MAX_H3_EXT_RES) {",
+      "replace": "if (childRes < 0 || childRes > MAX_H3_RES) {",
+      "expected_failures": [
+        "testHierarchyExt::d4g8_cellToChildPos_extRes (E_RES_DOMAIN on ext childRes)"
+      ]
+    },
+    {
       "id": "W64-maxDimByCIIres",
       "rule": "W64",
       "description": "v0.2.0 int → int64 widening: maxDimByCIIres extended to length 23 with int64 elements. Reverting to length 21 / int makes res 21-22 read OOB (or, if length kept 23, truncate maxDim[22]=3.95e9 to a wrong int32 value, breaking _adjustOverageClassII).",

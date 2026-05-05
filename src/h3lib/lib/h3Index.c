@@ -1591,7 +1591,9 @@ static H3Error validateChildPos(int64_t childPos, H3Index parent,
  * list of children
  */
 H3Error H3_EXPORT(cellToChildPos)(H3Index child, int parentRes, int64_t *out) {
-    int childRes = H3_GET_RESOLUTION(child);
+    // H3-EXTENDED: read effective res so ext children (res 16-22) report
+    // their true depth. Stock cells: identical to H3_GET_RESOLUTION.
+    int childRes = H3_GET_EFFECTIVE_RESOLUTION(child);
     // Get the parent at res. This will catch any resolution errors
     H3Index originalParent;
     H3Error parentError =
@@ -1618,7 +1620,8 @@ H3Error H3_EXPORT(cellToChildPos)(H3Index child, int parentRes, int64_t *out) {
             }
 
             parentIsPentagon = H3_EXPORT(isPentagon)(parent);
-            int rawDigit = H3_GET_INDEX_DIGIT(child, res);
+            // H3-EXTENDED: dispatching getter handles ext digit positions.
+            int rawDigit = H3_GET_DIGIT_AT_RES(child, res);
             // Validate the digit before proceeding
             if (rawDigit == INVALID_DIGIT ||
                 (parentIsPentagon && rawDigit == K_AXES_DIGIT)) {
@@ -1645,7 +1648,8 @@ H3Error H3_EXPORT(cellToChildPos)(H3Index child, int parentRes, int64_t *out) {
     } else {
         // Hexagon logic. Offsets are simple powers of 7
         for (int res = childRes; res > parentRes; res--) {
-            int digit = H3_GET_INDEX_DIGIT(child, res);
+            // H3-EXTENDED: dispatching getter handles ext digit positions.
+            int digit = H3_GET_DIGIT_AT_RES(child, res);
             if (digit == INVALID_DIGIT) {
                 return E_CELL_INVALID;
             }
@@ -1673,11 +1677,14 @@ H3Error H3_EXPORT(cellToChildPos)(H3Index child, int parentRes, int64_t *out) {
 H3Error H3_EXPORT(childPosToCell)(int64_t childPos, H3Index parent,
                                   int childRes, H3Index *child) {
     // Validate resolution
-    if (childRes < 0 || childRes > MAX_H3_RES) {
+    // H3-EXTENDED: Rule LB — accept ext resolutions [16, MAX_H3_EXT_RES].
+    if (childRes < 0 || childRes > MAX_H3_EXT_RES) {
         return E_RES_DOMAIN;
     }
     // Validate parent resolution
-    int parentRes = H3_GET_RESOLUTION(parent);
+    // H3-EXTENDED: ext parents (res 16-22) report effective res via the
+    // dispatching getter; stock parents are unaffected.
+    int parentRes = H3_GET_EFFECTIVE_RESOLUTION(parent);
     if (childRes < parentRes) {
         return E_RES_MISMATCH;
     }
@@ -1692,7 +1699,10 @@ H3Error H3_EXPORT(childPosToCell)(int64_t childPos, H3Index parent,
     *child = parent;
     int64_t idx = childPos;
 
-    H3_SET_RESOLUTION(*child, childRes);
+    // H3-EXTENDED: atomic effective-res setter writes stock-res field +
+    // ext flag in one shot. Stock branch (childRes ≤ 15) preserves the
+    // original H3_SET_RESOLUTION behavior.
+    H3_SET_EFFECTIVE_RESOLUTION(*child, childRes);
 
     if (H3_EXPORT(isPentagon)(parent)) {
         // Pentagon tile logic. Pentagon tiles skip the 1 digit, so the offsets
@@ -1706,17 +1716,18 @@ H3Error H3_EXPORT(childPosToCell)(int64_t childPos, H3Index parent,
                 // digit to account for the skipped direction
                 int64_t pentWidth = 1 + (5 * (resWidth - 1)) / 6;
                 if (idx < pentWidth) {
-                    H3_SET_INDEX_DIGIT(*child, parentRes + res, 0);
+                    // H3-EXTENDED: dispatching setter handles ext digits.
+                    H3_SET_DIGIT_AT_RES(*child, parentRes + res, 0);
                 } else {
                     idx -= pentWidth;
                     inPent = false;
-                    H3_SET_INDEX_DIGIT(*child, parentRes + res,
-                                       (idx / resWidth) + 2);
+                    H3_SET_DIGIT_AT_RES(*child, parentRes + res,
+                                        (idx / resWidth) + 2);
                     idx %= resWidth;
                 }
             } else {
                 // We're no longer inside a pentagon, continue as for hex
-                H3_SET_INDEX_DIGIT(*child, parentRes + res, idx / resWidth);
+                H3_SET_DIGIT_AT_RES(*child, parentRes + res, idx / resWidth);
                 idx %= resWidth;
             }
         }
@@ -1724,7 +1735,7 @@ H3Error H3_EXPORT(childPosToCell)(int64_t childPos, H3Index parent,
         // Hexagon tile logic. Offsets are simple powers of 7
         for (int res = 1; res <= resOffset; res++) {
             int64_t resWidth = _ipow(7, resOffset - res);
-            H3_SET_INDEX_DIGIT(*child, parentRes + res, idx / resWidth);
+            H3_SET_DIGIT_AT_RES(*child, parentRes + res, idx / resWidth);
             idx %= resWidth;
         }
     }
