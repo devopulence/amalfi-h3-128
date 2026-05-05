@@ -103,6 +103,98 @@ equivalent clamp). Open follow-up.
 
 ---
 
-## v0.2.0 work — see below
+## POC-5 — CoordIJK int32 overflow stress (commit `bef722e3`)
 
-(populated during the session)
+Standalone analytic POC documenting the int32 overflow boundary.
+Inherits POC-1..4 discipline (single-file C99, no libh3 linkage,
+ASAN+UBSAN clean, exit 0). Uses `__builtin_*_overflow` to detect
+overflow without invoking the broken arithmetic at runtime.
+
+**85 assertions across CO-01..CO-32**, exit 0, ASAN+UBSAN clean.
+
+### Failure boundary (POC-5 result)
+
+| Path | First-broken res | Last-safe res | Site |
+|------|-------------------|---------------|------|
+| Hexagon | 21 | 20 | `maxDimByCIIres[22] = 2*7^11 > INT32_MAX` |
+| Pentagon | 19 (non-monotonic*) | 18 | `_adjustPentVertOverage` 3 × maxDim × √7 |
+
+*Pentagon is non-monotonic: trips at res 19, recovers at res 20,
+trips again at res 21+. POC-5 §"CO-30" documents the pattern.
+
+### v0.2.0 widening targets (per POC-5 §"v0.2.0 Widening Targets")
+
+1. **CoordIJK struct** — `int → int64_t` ✓ landed at `57672bc6`
+2. **CoordIJK arithmetic in coordijk.h** — partially landed (typedef +
+   `ijkDistance` return + `llabs`); rest implicit via int64_t
+   propagation
+3. **Static tables `maxDimByCIIres` + `unitScaleByCIIres`** — extend to
+   length 23 with `int64_t` elements (PENDING)
+4. **`_adjustOverageClassII` / `_adjustPentVertOverage` int locals → int64_t**
+   (PENDING)
+5. **Add regression suite `testCoordIjkExtRes`** with res 19-22
+   round-trips that POC-5 predicts will pass post-widening (PENDING)
+
+---
+
+## v0.2.0 widening — first commit (`57672bc6`)
+
+`v0.2.0(coordijk): widen CoordIJK struct fields int → int64_t`
+
+### Cascade
+
+The struct typedef change required only 2 mechanical fixes for the
+build to be green:
+
+1. `coordijk.h:710-716` — `ijkDistance` return type `int → int64_t`,
+   `abs()` → `llabs()`. The public `gridDistance` already returns
+   `int64_t *`; this just removes the internal truncation. Single
+   in-tree caller (`localij.c:615`) is API-compatible.
+2. `src/apps/applib/lib/utility.c:55` — `coordIjkPrint` format
+   specifier `%d` → `%" PRId64 "` for the widened field type.
+
+### Verification
+
+- `cmake --build build-dev -j` clean under ASAN+UBSAN flags.
+- ctest: **326/326 PASS** under ASAN+UBSAN (581.77s wall, pre-commit).
+- POC-5 still **85/85 PASS** (POC-5 is analytic, type-agnostic).
+
+### Notes
+
+Subsequent v0.2.0 commits should land:
+
+1. **Table widening (next)** — `faceijk.c:315, 345`. Currently
+   `static const int maxDimByCIIres[]` with 21 entries (Session-2
+   stopped at index 20 because index 22 = 3,954,653,486 overflows
+   int32). Widen to `static const int64_t maxDimByCIIres[]` with
+   length 23 (entries through res 22). Same for `unitScaleByCIIres`.
+
+2. **Internal int locals** — `_adjustOverageClassII` (`faceijk.c:602,
+   610, 776, 918`) and `_adjustPentVertOverage` use `int maxDim,
+   unitScale, transScale` locals. Widen to `int64_t`. Bundled with
+   table widening per "one widening site = one commit" applied at
+   the LOGICAL site (table + its consumers).
+
+3. **Regression test** — `testCoordIjkExtRes.c`: round-trip
+   `latLngToCell → cellToLatLng → latLngToCell` at res 20-22 across
+   the 3 POC-5 geos + pentagon-touching coords at res 19+. After
+   widening, all should round-trip bit-identically.
+
+4. **Audit update** — `audit.py` `MAX_H3_RES_CLASSIFICATIONS` adds
+   `coordijk.h` widened sites and changes `faceijk.c` table sites
+   from `deferred:post-mvp` to `widened`.
+
+---
+
+## Session 5 commits
+
+| Hash | Subject |
+|------|---------|
+| `1fa4db7c` | fix(h4): clamp res in dispatch macros for gcc shift-count-negative |
+| `ea8503e6` | docs(h4): close-out — CI matrix green at 1fa4db7c (10/10 §11 PASS) |
+| `bef722e3` | test: POC-5 CoordIJK int32 overflow at ext resolutions |
+| `57672bc6` | v0.2.0(coordijk): widen CoordIJK struct fields int → int64_t |
+
+ctest progression: 326/326 → 326/326 → 326/326 → 326/326 (no new
+test suites this session; Session 6 will add `testCoordIjkExtRes`).
+
