@@ -105,7 +105,7 @@ typedef enum {
  * @param j The desired j component value.
  * @param k The desired k component value.
  */
-static inline void _setIJK(CoordIJK *ijk, int i, int j, int k) {
+static inline void _setIJK(CoordIJK *ijk, int64_t i, int64_t j, int64_t k) {
     ijk->i = i;
     ijk->j = j;
     ijk->k = k;
@@ -157,7 +157,7 @@ static inline void _ijkSub(const CoordIJK *h1, const CoordIJK *h2,
  * @param c The ijk coordinates to scale.
  * @param factor The scaling factor.
  */
-static inline void _ijkScale(CoordIJK *c, int factor) {
+static inline void _ijkScale(CoordIJK *c, int64_t factor) {
     c->i *= factor;
     c->j *= factor;
     c->k *= factor;
