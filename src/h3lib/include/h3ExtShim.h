@@ -58,6 +58,32 @@ DECLSPEC H3Error h3_ext_grid_distance(const H3Index *a, const H3Index *b,
 DECLSPEC H3Error h3_ext_h3_to_string(const H3Index *cell, char *out, size_t sz);
 DECLSPEC H3Error h3_ext_string_to_h3(const char *str, H3Index *out);
 
+/* Session 7 follow-on shims — same Pattern 4 contract (by-pointer H3Index,
+ * H3Error return, NULL → E_FAILED). Added to round out the surface required
+ * by the Python h3_extended package (16-function public API). */
+
+/* Area unit codes for h3_ext_cell_area. Integer-valued so cffi can bind
+ * without exposing an enum tag. */
+#define H3_EXT_AREA_M2 0
+#define H3_EXT_AREA_KM2 1
+#define H3_EXT_AREA_RADS2 2
+
+DECLSPEC H3Error h3_ext_cell_to_boundary(const H3Index *cell,
+                                         CellBoundary *out);
+DECLSPEC H3Error h3_ext_cell_area(const H3Index *cell, int unit, double *out);
+DECLSPEC H3Error h3_ext_max_grid_disk_size(int k, int64_t *out);
+DECLSPEC H3Error h3_ext_grid_disk(const H3Index *origin, int k, H3Index *out);
+DECLSPEC H3Error h3_ext_grid_path_cells_size(const H3Index *start,
+                                             const H3Index *end, int64_t *out);
+DECLSPEC H3Error h3_ext_grid_path_cells(const H3Index *start,
+                                        const H3Index *end, H3Index *out);
+DECLSPEC H3Error h3_ext_cell_to_local_ij(const H3Index *origin,
+                                         const H3Index *cell, uint32_t mode,
+                                         CoordIJ *out);
+DECLSPEC H3Error h3_ext_local_ij_to_cell(const H3Index *origin,
+                                         const CoordIJ *ij, uint32_t mode,
+                                         H3Index *out);
+
 /* Cross-TU consistency probes (D7-G2 — must report 16/16 from any TU). */
 DECLSPEC size_t h3_ext_sizeof_h3index(void);
 DECLSPEC size_t h3_ext_alignof_h3index(void);

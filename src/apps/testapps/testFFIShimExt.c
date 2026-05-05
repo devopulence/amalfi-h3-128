@@ -205,6 +205,8 @@ SUITE(ffiShimExt) {
         double d = 0;
         int64_t i64 = 0;
         int i = 0;
+        CellBoundary bnd;
+        CoordIJ ij = {0, 0};
 
         t_assert(h3_ext_lat_lng_to_cell(0.0, 0.0, 5, NULL) == E_FAILED, "");
         t_assert(h3_ext_cell_to_lat_lng(NULL, &d, &d) == E_FAILED, "");
@@ -217,5 +219,92 @@ SUITE(ffiShimExt) {
         t_assert(h3_ext_grid_distance(NULL, &dummy, &i64) == E_FAILED, "");
         t_assert(h3_ext_h3_to_string(NULL, strbuf, sizeof(strbuf)) == E_FAILED, "");
         t_assert(h3_ext_string_to_h3(NULL, &dummy) == E_FAILED, "");
+
+        // Session 7 follow-on shims — NULL contract.
+        t_assert(h3_ext_cell_to_boundary(NULL, &bnd) == E_FAILED, "");
+        t_assert(h3_ext_cell_to_boundary(&dummy, NULL) == E_FAILED, "");
+        t_assert(h3_ext_cell_area(NULL, H3_EXT_AREA_M2, &d) == E_FAILED, "");
+        t_assert(h3_ext_cell_area(&dummy, H3_EXT_AREA_M2, NULL) == E_FAILED, "");
+        t_assert(h3_ext_max_grid_disk_size(0, NULL) == E_FAILED, "");
+        t_assert(h3_ext_grid_disk(NULL, 0, &dummy) == E_FAILED, "");
+        t_assert(h3_ext_grid_disk(&dummy, 0, NULL) == E_FAILED, "");
+        t_assert(h3_ext_grid_path_cells_size(NULL, &dummy, &i64) == E_FAILED, "");
+        t_assert(h3_ext_grid_path_cells(NULL, &dummy, &dummy) == E_FAILED, "");
+        t_assert(h3_ext_cell_to_local_ij(NULL, &dummy, 0, &ij) == E_FAILED, "");
+        t_assert(h3_ext_cell_to_local_ij(&dummy, NULL, 0, &ij) == E_FAILED, "");
+        t_assert(h3_ext_local_ij_to_cell(NULL, &ij, 0, &dummy) == E_FAILED, "");
+        t_assert(h3_ext_local_ij_to_cell(&dummy, NULL, 0, &dummy) == E_FAILED, "");
+
+        // Bad unit code → E_OPTION_INVALID, not E_FAILED.
+        t_assert(h3_ext_cell_area(&dummy, 99, &d) == E_OPTION_INVALID,
+                 "bad unit returns E_OPTION_INVALID");
+    }
+
+    // D7-G4 — Session 7 follow-on shims linkable + smoke through each.
+    // Builds a deterministic stock cell at res 9 (so all paths exercise
+    // existing-spec H3 code without depending on ext semantics here).
+    TEST(d7g4_followOnShimsLinkable) {
+        H3Index origin = 0;
+        H3Error err = h3_ext_lat_lng_to_cell(0.7128, -1.2820, 9, &origin);
+        t_assertSuccess(err);
+
+        // 11. cell_to_boundary — finite verts, ccw count <= 10.
+        CellBoundary bnd = {0};
+        err = h3_ext_cell_to_boundary(&origin, &bnd);
+        t_assertSuccess(err);
+        t_assert(bnd.numVerts >= 5 && bnd.numVerts <= MAX_CELL_BNDRY_VERTS,
+                 "cell_to_boundary returns 5..10 vertices");
+        for (int v = 0; v < bnd.numVerts; v++) {
+            t_assert(!isnan(bnd.verts[v].lat) && !isnan(bnd.verts[v].lng),
+                     "boundary vertex finite");
+        }
+
+        // 12. cell_area — three units round-trip the unit conversion.
+        double areaM2 = 0, areaKm2 = 0, areaRads2 = 0;
+        t_assertSuccess(h3_ext_cell_area(&origin, H3_EXT_AREA_M2, &areaM2));
+        t_assertSuccess(h3_ext_cell_area(&origin, H3_EXT_AREA_KM2, &areaKm2));
+        t_assertSuccess(h3_ext_cell_area(&origin, H3_EXT_AREA_RADS2, &areaRads2));
+        t_assert(areaM2 > 0 && areaKm2 > 0 && areaRads2 > 0,
+                 "cell_area positive in all units");
+        t_assert(fabs(areaM2 - areaKm2 * 1e6) / areaM2 < 1e-9,
+                 "m^2 == km^2 * 1e6 within 1ppb");
+
+        // 13. max_grid_disk_size at k=2 → 1 + 6 + 12 = 19 for a hexagon disk.
+        int64_t maxDiskSz = 0;
+        t_assertSuccess(h3_ext_max_grid_disk_size(2, &maxDiskSz));
+        t_assert(maxDiskSz == 19, "max_grid_disk_size(k=2) == 19");
+
+        // 14. grid_disk — caller-allocated buffer of maxDiskSz, populates >= 1.
+        H3Index disk[19] = {0};
+        t_assertSuccess(h3_ext_grid_disk(&origin, 2, disk));
+        int diskCount = 0;
+        for (int idx = 0; idx < 19; idx++) {
+            if (disk[idx] != 0) diskCount++;
+        }
+        t_assert(diskCount >= 1 && diskCount <= 19,
+                 "grid_disk populates between 1 and 19 cells");
+        t_assert(disk[0] == origin, "disk[0] is origin (k=0 first)");
+
+        // 15. grid_path_cells_size — origin to itself is 1.
+        int64_t pathSz = 0;
+        t_assertSuccess(h3_ext_grid_path_cells_size(&origin, &origin, &pathSz));
+        t_assert(pathSz == 1, "self-path size is 1");
+
+        // 16. grid_path_cells — populates the single self-cell.
+        H3Index pathBuf[1] = {0};
+        t_assertSuccess(h3_ext_grid_path_cells(&origin, &origin, pathBuf));
+        t_assert(pathBuf[0] == origin, "self-path[0] == origin");
+
+        // 17. cell_to_local_ij — origin → ij in its own frame (whatever
+        // the (i,j) anchor convention is, it must round-trip).
+        CoordIJ ij = {-12345, -12345};
+        t_assertSuccess(h3_ext_cell_to_local_ij(&origin, &origin, 0, &ij));
+        t_assert(ij.i != -12345 && ij.j != -12345,
+                 "cell_to_local_ij wrote both i and j");
+
+        // 18. local_ij_to_cell — round-trip back to origin.
+        H3Index back = 0;
+        t_assertSuccess(h3_ext_local_ij_to_cell(&origin, &ij, 0, &back));
+        t_assert(back == origin, "local_ij round-trips back to origin");
     }
 }

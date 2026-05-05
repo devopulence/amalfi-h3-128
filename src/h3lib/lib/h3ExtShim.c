@@ -90,6 +90,61 @@ H3Error h3_ext_string_to_h3(const char *str, H3Index *out) {
     return H3_EXPORT(stringToH3)(str, out);
 }
 
+/* ── Session 7 follow-on shims — same Pattern 4 contract. ─────────────── */
+
+H3Error h3_ext_cell_to_boundary(const H3Index *cell, CellBoundary *out) {
+    if (cell == NULL || out == NULL) return E_FAILED;
+    return H3_EXPORT(cellToBoundary)(*cell, out);
+}
+
+H3Error h3_ext_cell_area(const H3Index *cell, int unit, double *out) {
+    if (cell == NULL || out == NULL) return E_FAILED;
+    switch (unit) {
+        case H3_EXT_AREA_M2:
+            return H3_EXPORT(cellAreaM2)(*cell, out);
+        case H3_EXT_AREA_KM2:
+            return H3_EXPORT(cellAreaKm2)(*cell, out);
+        case H3_EXT_AREA_RADS2:
+            return H3_EXPORT(cellAreaRads2)(*cell, out);
+        default:
+            return E_OPTION_INVALID;
+    }
+}
+
+H3Error h3_ext_max_grid_disk_size(int k, int64_t *out) {
+    if (out == NULL) return E_FAILED;
+    return H3_EXPORT(maxGridDiskSize)(k, out);
+}
+
+H3Error h3_ext_grid_disk(const H3Index *origin, int k, H3Index *out) {
+    if (origin == NULL || out == NULL) return E_FAILED;
+    return H3_EXPORT(gridDisk)(*origin, k, out);
+}
+
+H3Error h3_ext_grid_path_cells_size(const H3Index *start, const H3Index *end,
+                                    int64_t *out) {
+    if (start == NULL || end == NULL || out == NULL) return E_FAILED;
+    return H3_EXPORT(gridPathCellsSize)(*start, *end, out);
+}
+
+H3Error h3_ext_grid_path_cells(const H3Index *start, const H3Index *end,
+                               H3Index *out) {
+    if (start == NULL || end == NULL || out == NULL) return E_FAILED;
+    return H3_EXPORT(gridPathCells)(*start, *end, out);
+}
+
+H3Error h3_ext_cell_to_local_ij(const H3Index *origin, const H3Index *cell,
+                                uint32_t mode, CoordIJ *out) {
+    if (origin == NULL || cell == NULL || out == NULL) return E_FAILED;
+    return H3_EXPORT(cellToLocalIj)(*origin, *cell, mode, out);
+}
+
+H3Error h3_ext_local_ij_to_cell(const H3Index *origin, const CoordIJ *ij,
+                                uint32_t mode, H3Index *out) {
+    if (origin == NULL || ij == NULL || out == NULL) return E_FAILED;
+    return H3_EXPORT(localIjToCell)(*origin, ij, mode, out);
+}
+
 size_t h3_ext_sizeof_h3index(void) { return sizeof(H3Index); }
 
 size_t h3_ext_alignof_h3index(void) { return __alignof__(H3Index); }
