@@ -224,19 +224,23 @@
            (((__uint128_t)(digit))                                                  \
             << (H3_EXT_DIGITS_OFFSET + ((res) - 16) * 3)))
 
-/* C13: H3_GET_DIGIT_AT_RES — dispatching getter. Use when res is unknown-range. */
-#define H3_GET_DIGIT_AT_RES(h, res)                                  \
-    ((res) <= MAX_H3_RES ? H3_GET_INDEX_DIGIT((h), (res))            \
+/* C13: H3_GET_DIGIT_AT_RES — dispatching getter. Use when res is unknown-range.
+ *      Stock branch arg masked with MAX_H3_RES so gcc does not constant-fold
+ *      a negative shift count when callers pass a literal ext-res (>= 16).
+ *      The mask is a no-op for res in [0, 15] and unreachable for res > 15. */
+#define H3_GET_DIGIT_AT_RES(h, res)                                          \
+    ((res) <= MAX_H3_RES ? H3_GET_INDEX_DIGIT((h), ((res) & MAX_H3_RES))     \
                          : H3_GET_EXT_INDEX_DIGIT((h), (res)))
 
 /* C14: H3_SET_DIGIT_AT_RES — dispatching setter. Replaces H3_SET_INDEX_DIGIT
- *      at every site whose res argument may exceed 15 at runtime. */
-#define H3_SET_DIGIT_AT_RES(h, res, digit)                  \
-    do {                                                    \
-        if ((res) <= MAX_H3_RES)                            \
-            H3_SET_INDEX_DIGIT((h), (res), (digit));        \
-        else                                                \
-            H3_SET_EXT_INDEX_DIGIT((h), (res), (digit));    \
+ *      at every site whose res argument may exceed 15 at runtime.
+ *      Stock branch arg masked with MAX_H3_RES (see C13 rationale). */
+#define H3_SET_DIGIT_AT_RES(h, res, digit)                                \
+    do {                                                                  \
+        if ((res) <= MAX_H3_RES)                                          \
+            H3_SET_INDEX_DIGIT((h), ((res) & MAX_H3_RES), (digit));       \
+        else                                                              \
+            H3_SET_EXT_INDEX_DIGIT((h), (res), (digit));                  \
     } while (0)
 
 // H3-EXTENDED: gate A1 — sizeof(H3Index) must be 16 bytes (128-bit).
