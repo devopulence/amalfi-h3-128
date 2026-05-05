@@ -1,6 +1,6 @@
 # Running Tally — All Scripts and Source Files
 
-> **Last Updated:** 2026-05-03 (Session 3 of implementation, mid-session save)
+> **Last Updated:** 2026-05-05 (Sessions 5 + 6 of implementation, v0.2.0 widening complete)
 > **Scope:** H3-Extended (128-bit) preflight validation campaign + Session 1 implementation (Phases A, B, C) + Session 2 implementation (Phases D1, D2, D3, D6) + Session 3 implementation in progress (D4 + D5 complete; D7 + E + F + G + H still open). Preflight programs compile in isolation; implementation files are part of the H3 v4.4.1 source tree on `feat/h3-128-mvp`.
 
 ---
@@ -230,6 +230,95 @@ Phase G deliverable per playbook §13. Lives at `.claude/skills/h3-128-audit/`; 
 
 ---
 
+## Session 5 Implementation Files (H4 close-out + POC-5 + v0.2.0 first widening on `feat/h3-128-mvp`)
+
+H3 source tree edits and additions delivered by Session 5. Each landed under ASAN+UBSAN with the pre-commit hook running the full ctest suite (326 → 326 → 326 → 326 → 326; no new test suites). 5 commits total. **First ALL-GREEN cross-platform CI run since Session 1** (run `25370995715` post-fix at `1fa4db7c`). 10/10 §11 acceptance criteria PASS — v0.1.0-128bit-mvp conclusively shipped. v0.2.0 begun with `CoordIJK` struct typedef widening.
+
+### H4 fix (Session 5)
+
+| File | Created/Modified | Description |
+|------|------------------|-------------|
+| `src/h3lib/include/h3Index.h` | 2026-05-05 — modified (commit `1fa4db7c`) | H4 fix per playbook §10 cross-platform discipline. Stock-branch arg of `H3_GET_DIGIT_AT_RES` (line 230) and `H3_SET_DIGIT_AT_RES` (line 240) masked with `& MAX_H3_RES` (= 0xF). Identity for res ∈ [0, 15]; unreachable at runtime for res > 15. Linux gcc with `-Werror=shift-count-negative` constant-folds the dead stock branch and computes negative shift count when caller passes literal ext-res ≥ 16 (e.g. testValidationExt.c:223 `H3_SET_DIGIT_AT_RES(h, 18, INVALID_DIGIT)`). Apple clang doesn't run this static check, so Sessions 1-4 all green on macOS but red on Linux. Identical commit chain restored: ctest 326/326 PASS local; CI all 4 jobs green on the next push. |
+
+### POC-5 source artifacts (Session 5)
+
+| File | Created/Modified | Description |
+|------|------------------|-------------|
+| `poc5_coordijk_overflow.c` | 2026-05-05 — created (commit `bef722e3`) | POC-5: CoordIJK int32 overflow stress test. Standalone single-file C99 (~610 lines), no libh3 linkage, ASAN+UBSAN clean, exit 0. Inherits POC-1..4 discipline. Uses `__builtin_*_overflow` to detect int32 boundaries deterministically without invoking the broken arithmetic at runtime. **85 assertions across CO-01..CO-32**. Documents failure boundary: hexagon first-broken res 21 (last-safe res 20), pentagon non-monotonic first-broken res 19 (recovers at 20, breaks again at 21+). 3 user-spec geos: Monmouth 40.33/-73.99, Palm Beach 26.71/-80.05, Piano di Sorrento 40.63/14.40. Identifies 4 widening surfaces for v0.2.0. |
+| `poc5.md` | 2026-05-05 — created (commit `bef722e3`) | POC-5 spec doc. Test-category table (CO-01..32, target ≥75 assertions, achieved 85), geo-input table, failure-boundary table for both hexagon/pentagon paths, v0.2.0 widening targets list (CoordIJK struct, CoordIJK arithmetic helpers, static tables, _adjustOverageClassII/_adjustPentVertOverage), success criteria, build command, checkpoint plan. |
+
+### v0.2.0 first widening (Session 5)
+
+| File | Created/Modified | Description |
+|------|------------------|-------------|
+| `src/h3lib/include/coordijk.h` | 2026-05-05 — modified (commit `57672bc6`) | v0.2.0 widening #1: `CoordIJK` struct fields `int i, j, k → int64_t i, j, k` (lines 48-58). Comment block updated to reference POC-5 and document that this unblocks ext res 20-22 round-trips + pentagon overage at res 19+. `ijkDistance` return type widened `int → int64_t` and `abs()` → `llabs()` (lines 710-716). Public `gridDistance` already returns `int64_t *out` so this just removes the internal truncation; one in-tree caller (`localij.c:615 *out = ijkDistance(...)`) is API-compatible. |
+| `src/apps/applib/lib/utility.c` | 2026-05-05 — modified (commit `57672bc6`) | v0.2.0 cascade fix: `coordIjkPrint` format specifier `%d` → `%" PRId64 "` for the new int64_t struct field type (line 55). `<inttypes.h>` already included. Only cascade fix needed for the typedef change. |
+
+### Session 5 checkpoints (multi-stage)
+
+| File | Created/Modified | Description |
+|------|------------------|-------------|
+| `SESSION_5_CHECKPOINT.md` | 2026-05-05 — created (commit `ea8503e6`), updated (commit `39ebff5c`) | H4 close-out doc covering failure mode, fix at `1fa4db7c`, 4 CI job IDs (74394171722 macos-release, 74394171723 macos-sanitizers, 74394171729 ubuntu-sanitizers, 74394171759 ubuntu-release) on run `25370995715`. Updated with v0.2.0 first-commit summary + Session 6 entry points. **10/10 §11 acceptance criteria PASS**. Audit-rule follow-up suggestion: detect dispatch-macro patterns where stock-branch can be reached with constant ext-res, and require `& MAX_H3_RES` clamping. |
+| `contexts/contexts-may-05-20260505-124714.md` | 2026-05-05 — created | This context file (covers Sessions 5+6 jointly). |
+
+---
+
+## Session 6 Implementation Files (v0.2.0 CoordIJK int64 widening complete on `feat/h3-128-mvp`)
+
+H3 source tree edits and additions delivered by Session 6. Each landed under ASAN+UBSAN with the pre-commit hook running the full ctest suite (326 → 326 → 327 → 327; +1 from new testCoordIjkExtRes suite). 4 commits total. **POC-5 predicted failure boundary now CLEARED**: hexagon path works at res 16-22, pentagon path works at res 16-22 (no more non-monotonic break at res 19+).
+
+### v0.2.0 widening #2 — static tables (Session 6)
+
+| File | Created/Modified | Description |
+|------|------------------|-------------|
+| `src/h3lib/lib/faceijk.c` | 2026-05-05 — modified (commit `f84ab171`) | v0.2.0 widening #2: `maxDimByCIIres[]` extended length 21 → 23, element type `int → int64_t`. New entries: `[21]=-1` (Class III sentinel), `[22]=3954653486LL` (= 2*7^11 — the value Session 2 had to defer because it exceeds INT32_MAX = 2,147,483,647 by 1,807,169,839). `unitScaleByCIIres[]` same pattern: `[21]=-1`, `[22]=1977326743LL` (= 7^11). Comment block at lines 298-313 / 339-345 updated to document the v0.2.0 widening. 4 int locals widened to int64_t in `_adjustOverageClassII` (lines 925-926 maxDim, 965-966 unitScale) and `_faceIjkPentToVerts` overage paths (lines 617-622 + 783-788 — pentagon edge-vertex Vec2d bounds). Vec2d initializers gain explicit `(double)maxDim` casts. |
+| `src/h3lib/include/coordijk.h` | 2026-05-05 — modified (commit `f84ab171`) | v0.2.0 widening (continued): `_setIJK` parameters `int → int64_t` (line 108) — called from `_adjustOverageClassII:947` with int64_t maxDim arg. `_ijkScale` factor parameter `int → int64_t` (line 156) — called with int64_t unitScale at faceijk.c:609, 967. Without these param widenings, the table-derived int64 values would silently narrow at the call site. |
+
+### v0.2.0 widening #3 — inner arithmetic + new test (Session 6)
+
+| File | Created/Modified | Description |
+|------|------------------|-------------|
+| `src/h3lib/include/coordijk.h` | 2026-05-05 — modified (commit `5fbdcf4e`) | v0.2.0 widening #3: inner-arithmetic int locals widened. Adding testCoordIjkExtRes exposed UBSAN trips at coordijk.h:487, 488, 504, 505 — all 4 `_upAp7 / _upAp7r / _upAp7Checked / _upAp7rChecked` declared `int i = ijk->i - ijk->k; int j = ijk->j - ijk->k;` capturing now-int64 fields and silently narrowing. POC-5 §"CO-19..22" predicted exactly these sites. Widened all 4 functions: int → int64_t locals (lines 388-389, 436-437, 484-485, 501-502); `(int)lround(...)` → `(int64_t)lround(...)` with explicit `(double)` casts on the floating arithmetic (lines 411-412, 459-460, 483-484, 500-501); `_ijkNormalizeCouldOverflow` `int max,min` → int64_t and `ADD/SUB_INT32S_OVERFLOWS` replaced with `__builtin_add_overflow`/`__builtin_sub_overflow` (type-generic, exact int64; lines 167-188); `_ijkNormalize::min` widened (line 233); `_ijkToHex2d` int i,j → int64_t with `(double)` casts on Vec2d arithmetic (lines 247-251); `_hex2dToCoordIJK` int m1,m2 → int64_t with `(int64_t)x1` quantization cast and `(double)` casts on folding arithmetic (lines 264-353); `INT32_MAX_3` → `INT64_MAX_3` (= INT64_MAX/3 ≈ 3.07e18, effectively unreachable for H3 magnitudes ~2e9 but kept for defense; line 98). `#undef INT32_MAX_3` → `#undef INT64_MAX_3` (line 753). |
+| `src/apps/testapps/testCoordIjkExtRes.c` | 2026-05-05 — created (commit `5fbdcf4e`) | NEW v0.2.0 regression suite. 6 TEST blocks (~3000 assertions): **CO-G1** 500 res 20 (Class II) cell-center round-trips bit-identical (already worked pre-widening but moved to first-class); **CO-G2** 500 res 21 (Class III) round-trips bit-identical (was 247/500 pre-widening — the headline gate); **CO-G3** 500 res 22 (Class II) round-trips bit-identical (was UBSAN trip pre-widening); **CO-G4** pentagon res 19+ getPentagons returns 12 distinct cells without UBSAN (POC-5 §"CO-24" boundary cleared); **CO-G5** stock res 0-15 byte-identity guard (CoordIJK widening must not regress stock); **CO-G6** 3 POC-5 user-spec geos (Monmouth, Palm Beach, Sorrento) × res 20-22 round-trip bit-identical (9/9 PASS). Header documents v0.2.0 prereqs and POC-5 §"Failure Boundary" reference. |
+
+### Stock test contract update (Session 6 — 1 site)
+
+Per CLAUDE.md non-negotiable #2 ("if compatibility must break, STOP and surface"). The pre-widening contract was "INT32_MAX inputs overflow"; v0.2.0 makes the safe arithmetic range int64, so the new contract is "INT64_MAX inputs overflow". Test intent preserved at the new bound.
+
+| File | Created/Modified | Description |
+|------|------------------|-------------|
+| `src/apps/testapps/testCoordIjkInternal.c` | 2026-05-05 — modified (commit `5fbdcf4e`) | Stock test contract update at lines 54-94: `_upAp7Checked` and `_upAp7rChecked` overflow-guard tests. `INT32_MAX → INT64_MAX` (and `/2`, `/3` proportions) in 12 `_setIJK` overflow probes. The test intent ("i + i overflows", "i * 3 overflows", "j + j overflows", "(i * 3) - j overflows", "i + (j * 2) overflows") is preserved at the new int64 bound. Comment block added at line 54 documenting the contract update rationale. |
+
+### Test infrastructure registration (Session 6)
+
+| File | Created/Modified | Description |
+|------|------------------|-------------|
+| `CMakeTests.cmake` | 2026-05-05 — modified (commit `5fbdcf4e`) | Test registration: `add_h3_test(testCoordIjkExtRes src/apps/testapps/testCoordIjkExtRes.c)` added after the Phase F testAuxiliaryExt registration (line 283-284). Existing Session 1-4 registrations unchanged. |
+
+### Audit infrastructure update (Session 6)
+
+| File | Created/Modified | Description |
+|------|------------------|-------------|
+| `.claude/skills/h3-128-audit/mutations/manifest.json` | 2026-05-05 — modified (commit `36a5b36d`) | Added 2 W64 mutations covering v0.2.0 widening. **W64-CoordIJK-fields**: reverting struct fields `int64_t → int` trips testCoordIjkExtRes::co_g3 and UBSAN at res 22 in `_upAp7`/`_upAp7r`. **W64-maxDimByCIIres**: reverting the table to `int` element type silently truncates `maxDim[22] = 3,954,653,486` and breaks res 21+ round-trips. The 6 required rules (LB/GR/DW/DR/RW/INIT) remain present. W64 is a v0.2.0-introduced rule for type widening; not yet a required-set member. audit.py status: 24 sites classified, 0 CRITICAL, 0 FINDING. |
+
+### Session 6 checkpoint (Session 6)
+
+| File | Created/Modified | Description |
+|------|------------------|-------------|
+| `SESSION_6_CHECKPOINT.md` | 2026-05-05 — created (commit `88c7c94f`) | Session 6 acceptance signoff. Records 4 commits (f84ab171, 5fbdcf4e, 36a5b36d, 88c7c94f), gate-by-gate testCoordIjkExtRes results (CO-G1..G6 all PASS), 7 architectural notes (POC-5 prediction accuracy → 3-layer cascade lesson; struct alone insufficient; stock contract precedent; `__builtin_*_overflow` type-generic; pentagon non-monotonic confirmed; gh auth via .env GITHUB_PAT; near-miss accidental `git add -A`), deferrals carried forward (cellToChildPos still post-MVP, compaction/polyfill/edges/vertices/aux-stats out of MVP, B2 MSVC), Session 7 entry points (tag v0.2.0, cellToChildPos, libm tolerance, POC1-4 tracking). |
+
+### Run 25388983711 (CI confirmation)
+
+All 4 matrix jobs green on commit `88c7c94f`:
+- ✓ release on macos-latest
+- ✓ release on ubuntu-latest
+- ✓ sanitizers on macos-latest
+- ✓ sanitizers on ubuntu-latest
+
+v0.2.0 widening confirmed cross-platform under glibc + gcc + Linux x86_64 alongside Apple clang + Darwin arm64.
+
+---
+
 ## Build Commands
 
 Each POC is built and run independently from the repo root:
@@ -268,6 +357,15 @@ build-dev/bin/testRotationExt      # Session 2 — 302 assertions
 build-dev/bin/testAccessorExt      # Session 2 — 559 assertions
 build-dev/bin/testHierarchyExt     # Session 3 — D4-G0..G7, ~700 assertions (823,543-cell sweep)
 build-dev/bin/testLocalIjExt       # Session 3 — D5-G1, 1707 assertions
+build-dev/bin/testFFIShimExt       # Session 4 — D7-G1/G2/G3, 1038 assertions
+build-dev/bin/testValidationExt    # Session 4 — E1-E7, 220 assertions
+build-dev/bin/testAuxiliaryExt     # Session 4 — F1-F4, 771 assertions
+build-dev/bin/testCoordIjkExtRes   # Session 6 — CO-G1..G6, ~3000 assertions
+
+# POC-5 standalone (analytic — no libh3 linkage)
+gcc -std=c99 -fsanitize=address,undefined -Werror -Wall -Wextra \
+    -o /tmp/poc5 poc5_coordijk_overflow.c -lm && /tmp/poc5
+# Expected: 85 assertions PASS, exit 0
 ```
 
 ---
@@ -300,24 +398,46 @@ build-dev/bin/testLocalIjExt       # Session 3 — D5-G1, 1707 assertions
 | Session 4 — Stock test contract updates (testPentagonIndexes + tests/cli/getPentagons.txt) | 2 |
 | Session 4 — Audit infrastructure (audit.py + manifest.json + SKILL.md) | 3 |
 | Session 4 — SESSION_4_CHECKPOINT.md | 1 |
-| **Total** | **54** |
+| Session 5 — H4 fix (h3Index.h dispatch macros) | 1 (modified) |
+| Session 5 — POC-5 source artifacts (poc5_coordijk_overflow.c + poc5.md) | 2 |
+| Session 5 — v0.2.0 first widening (coordijk.h struct + utility.c cascade) | 2 (modified) |
+| Session 5 — SESSION_5_CHECKPOINT.md + contexts/contexts-may-05-* | 2 |
+| Session 6 — v0.2.0 table widening (faceijk.c maxDim/unitScale + coordijk.h _setIJK/_ijkScale) | 2 (modified) |
+| Session 6 — v0.2.0 inner arithmetic widening (coordijk.h all 4 _upAp7* + _ijkNormalize* + _ijkToHex2d + _hex2dToCoordIJK + INT64_MAX_3) | 1 (modified, bundled into 5fbdcf4e) |
+| Session 6 — testCoordIjkExtRes (new) | 1 |
+| Session 6 — Stock test contract update (testCoordIjkInternal INT32_MAX → INT64_MAX) | 1 (modified) |
+| Session 6 — Test infrastructure registration (CMakeTests.cmake) | — (modified) |
+| Session 6 — Audit manifest update (W64 mutations) | 1 (modified) |
+| Session 6 — SESSION_6_CHECKPOINT.md | 1 |
+| **Total** | **65** |
 
 | Metric | Value |
 |--------|-------|
-| Total assertions across all POCs | 10,067 |
+| Total assertions across all POCs | 10,152 (10,067 POC-1..4 + 85 POC-5) |
 | Total children enumerated (POC-3) | 828,210 |
-| Toolchain | Apple clang 21.0.0 / Darwin arm64 |
+| Toolchain (local) | Apple clang 21.0.0 / Darwin arm64 |
+| Toolchain (CI) | Ubuntu gcc / x86_64 + macOS Apple clang (4-job matrix) |
 | Sanitizers | AddressSanitizer + UndefinedBehaviorSanitizer (both clean) |
-| POCs passing | 4 / 4 |
+| POCs passing | 5 / 5 (POC-5 added Session 5) |
 | Session 1 ctest count | 317/317 PASS (316 stock + testStringExt 4051 assertions) |
-| Session 2 ctest count | 321/321 PASS (316 stock + 5 ext suites: testStringExt 4051, testEncoderExt 8305, testDecoderExt 5401, testRotationExt 302, testAccessorExt 559) |
-| Session 3 ctest count (mid-session) | 323/323 PASS (316 stock + 7 ext suites: Session 1+2 above + testHierarchyExt ~700 with 823,543-cell ext recursion + testLocalIjExt 1707) |
-| Session 4 ctest count | 326/326 PASS (316 stock + 10 ext suites: Session 1-3 above + testFFIShimExt 1038 + testValidationExt 220 + testAuxiliaryExt 771) |
+| Session 2 ctest count | 321/321 PASS (316 stock + 5 ext suites) |
+| Session 3 ctest count (mid-session) | 323/323 PASS |
+| Session 4 ctest count | 326/326 PASS (316 stock + 10 ext suites) |
+| Session 5 ctest count | 326/326 PASS (no new test suites; v0.2.0 first widening preserves count) |
+| Session 6 ctest count | **327/327 PASS** (316 stock + 11 ext suites: Session 1-4 above + testCoordIjkExtRes ~3000) |
 | Session 1 gates | A1-A5, B1, B3, C1-C3 PASS; B2 deferred |
 | Session 2 gates | D1-G1, D2-G1 (res 19), D3-G1, D6-G1 PASS; D2-G1 res 20-22 deferred (coordijk int64) |
 | Session 3 gates (mid-session) | D4-G0..G7 PASS (incl. 823,543-cell res 22 recursion), D5-G1 PASS (res 19); D7 + E + F + G + H still open |
 | Session 4 gates | D7-G1/G2/G3 PASS, E1-E7 PASS (E1+E2 CRITICAL), F1-F4 PASS (F2 ext-pentagon scoped to maxFaceCount; full overage walk deferred to coordijk int64), G1-G3 PASS, H1/H2/H3/H5/H6 PASS; H4 (CI on push) deferred. **v0.1.0-128bit-mvp tagged.** |
+| Session 5 gates | **H4 PASS** (CI matrix all 4 green on `1fa4db7c` after dispatch-macro fix). **10/10 §11 acceptance criteria PASS.** v0.2.0 begun: CoordIJK struct typedef widened. |
+| Session 6 gates | **v0.2.0 complete**: CO-G1 (res 20 round-trip), CO-G2 (res 21 round-trip — was 247/500 pre-widening, now 500/500), CO-G3 (res 22 round-trip), CO-G4 (pentagon res 19+ no UBSAN), CO-G5 (stock byte-identity), CO-G6 (3 user-spec geos × res 20-22) — ALL PASS. POC-5 predicted boundary cleared. |
 | Session 1 commits on `feat/h3-128-mvp` | 6 (8f8829ab, b2192926, 1e7b6ee3, 089ab9b0, 9e44107e, 944d6e5c) |
-| Session 2 commits on `feat/h3-128-mvp` | 18 (a36f68f1, 7bd3ef69, 569da6b2, d15f6668, 16491e7f, a98a2096, c18b505f, e75e840f, d09221c8, 437278c0, bf22c42f, f8c318ab, 9fe7f529, 5a64861e, 5a1311ca, bdf36196, 63cb7b6b, 7d5d6296) |
-| Session 3 commits on `feat/h3-128-mvp` (mid-session) | 7 (d22204e1 _zeroIndexDigits, 8fd4f1a0 iterators, 5aba98f5 cellToParent, 9211f12e _hasChildAtRes/Size/MakeChild/CenterChild bundle, 1bef1e34 testHierarchyExt, c395f91e localij widening, a9de465d testLocalIjExt) |
-| Session 4 commits on `feat/h3-128-mvp` | 10 (4d9feaa4 D7 FFI shim, 59a4949d E1, 61e3ce54 E2, 92481108 E3, 943fcb51 E4, 80f2f8ee E5, 36c56d14 E test, 198649d3 F widening, 841db752 F test, 2aabbdcd G audit) |
+| Session 2 commits on `feat/h3-128-mvp` | 18 |
+| Session 3 commits on `feat/h3-128-mvp` (mid-session) | 7 |
+| Session 4 commits on `feat/h3-128-mvp` | 10 (closing at `6bc988e9` + docs at `2be94029`) |
+| Session 5 commits on `feat/h3-128-mvp` | 5 (1fa4db7c H4 fix, ea8503e6 H4 close-out, bef722e3 POC-5, 57672bc6 v0.2.0 typedef, 39ebff5c session-5 doc) |
+| Session 6 commits on `feat/h3-128-mvp` | 4 (f84ab171 tables, 5fbdcf4e inner arithmetic + testCoordIjkExtRes, 36a5b36d audit W64 mutations, 88c7c94f session-6 doc) |
+| Cumulative commit count | 60 (Sessions 1-6 combined) |
+| Final HEAD (Session 6 close) | `88c7c94f` |
+| Tag history | `v0.1.0-128bit-mvp` (annotated, `d9af5e79` at `6bc988e9`); v0.2.0 tag pending Session 7 |
+| CI status | All 4 matrix jobs green on run `25388983711` for HEAD `88c7c94f` (Linux + macOS, release + sanitizers) |
