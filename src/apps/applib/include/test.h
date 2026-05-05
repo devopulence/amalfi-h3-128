@@ -33,12 +33,32 @@
 // vary across libm implementations (glibc vs musl vs Apple libm). Tighter
 // tolerance for ext where cell edges drop to ~1cm (res 16) and below.
 //
-// Tolerance values are empirical — the playbook calls for calibration by
-// running glibc/musl/darwin and taking 10x the worst observed delta.
-// Initial pre-calibration values: 1e-12 rad (~6.4 um) for ext, 1e-9 rad
-// (~6.4 mm) for stock. Used by Phase D-G1 / D-G2 round-trip tests.
+// Calibration (recalibrated 2026-05-05 — Session 7 item #3):
+//
+//   Single-platform measurement (macOS arm64, Apple libm 21.0.0):
+//     1000 random g_in × 23 resolutions, cellToLatLng → latLngToCell →
+//     cellToLatLng round-trip. Worst observed |Δlat| = |Δlng| = 0 rad
+//     across every resolution including res 22 (cell edge ~1.1 cm).
+//     Conclusion: round-trip is bit-deterministic on a single platform.
+//     Existing ext tests rely on this (h1 == h2 byte-identity).
+//
+//   Cross-libm analytic bound (glibc / musl / Apple):
+//     DBL_EPSILON ≈ 2.22e-16; a π-magnitude double has ULP ≈ 7e-16.
+//     Pessimistic divergence at asin/atan2 across mainstream libms:
+//     ≲ 50 ULPs → ≈ 3.5e-14 rad. 10× safety margin per playbook §9.2
+//     gives ≈ 3.5e-13 rad. Use 1e-13 as a defensible cross-libm tolerance
+//     for ext (rounds down for headroom — ~640 nm at Earth radius, well
+//     below the ~1 cm res-22 cell edge).
+//
+//   Stock res: 1e-9 rad ≈ 6.4 mm — kept conservative per playbook §9.2.
+//     Stock cell edges are ≥ 50 cm so this is comfortably loose.
+//
+// Cross-platform empirical calibration (against glibc/musl actuals via
+// CI) is deferred. The helper is currently unused (round-trip ext tests
+// use h1 == h2 bit-identity). When a future test first relies on it,
+// recalibrate from observed CI output rather than this analytic bound.
 static inline bool latlng_within_tolerance(LatLng a, LatLng b, int res) {
-    double tolerance_rads = res >= 16 ? 1e-12 : 1e-9;
+    double tolerance_rads = res >= 16 ? 1e-13 : 1e-9;
     return fabs(a.lat - b.lat) < tolerance_rads &&
            fabs(a.lng - b.lng) < tolerance_rads;
 }
