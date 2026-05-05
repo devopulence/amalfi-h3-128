@@ -127,3 +127,11 @@ h3-prof.trace
 /poc3_iterator
 /poc4_ffi
 /poc5_coordijk_overflow
+
+# Python wheel + test venv artifacts (Session 7).
+/dist/
+.venv*/
+*.egg-info/
+__pycache__/
+*.pyc
+.pytest_cache/

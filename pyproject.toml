@@ -1,0 +1,33 @@
+[build-system]
+requires = ["setuptools>=64", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "h3_extended"
+version = "0.3.0"
+description = "Python bindings for the H3-Extended (128-bit) spatial index — resolutions 0–22 (~1cm)."
+requires-python = ">=3.9"
+authors = [{ name = "Amalfi Intelligence" }]
+license = { text = "Apache-2.0" }
+dependencies = ["cffi>=1.15"]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "License :: OSI Approved :: Apache Software License",
+    "Operating System :: MacOS",
+    "Operating System :: POSIX :: Linux",
+    "Topic :: Scientific/Engineering :: GIS",
+]
+
+[project.optional-dependencies]
+test = ["pytest>=7", "h3>=4.0"]
+
+[tool.setuptools]
+packages = ["h3_extended", "h3_extended.tests"]
+include-package-data = true
+
+[tool.setuptools.package-data]
+h3_extended = ["libh3_extended.dylib", "libh3_extended.so"]
+
+[tool.pytest.ini_options]
+testpaths = ["h3_extended/tests"]

@@ -1,0 +1,102 @@
+name: Python wheel
+
+on:
+  push:
+    branches: [feat/h3-128-mvp, master]
+    tags: ["v*-python-bindings"]
+  pull_request:
+    branches: [feat/h3-128-mvp, master]
+  workflow_dispatch:
+
+jobs:
+  build-wheel:
+    name: Build + test ${{ matrix.os }} (${{ matrix.arch }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            arch: x86_64
+            lib: libh3.so
+            wheel_lib: libh3_extended.so
+          - os: macos-latest
+            arch: arm64
+            lib: libh3.dylib
+            wheel_lib: libh3_extended.dylib
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install Python build deps
+        run: python -m pip install --upgrade pip build cffi pytest h3
+
+      - name: Configure release build
+        run: |
+          mkdir build-release
+          cd build-release
+          cmake .. \
+            -DCMAKE_POSITION_INDEPENDENT_CODE=ON \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DBUILD_SHARED_LIBS=ON \
+            -DBUILD_TESTING=OFF \
+            -DBUILD_BENCHMARKS=OFF \
+            -DBUILD_FILTERS=OFF \
+            -DBUILD_GENERATORS=OFF
+
+      - name: Build C library
+        run: cmake --build build-release -j --target h3
+
+      - name: Stage shared library into Python package
+        shell: bash
+        run: |
+          set -euo pipefail
+          src="$(find build-release/lib -maxdepth 1 -name '${{ matrix.lib }}*' -not -type l | head -1)"
+          if [ -z "$src" ]; then
+            echo "ERROR: did not find ${{ matrix.lib }} in build-release/lib" >&2
+            ls -la build-release/lib >&2
+            exit 1
+          fi
+          echo "Staging $src as h3_extended/${{ matrix.wheel_lib }}"
+          cp "$src" "h3_extended/${{ matrix.wheel_lib }}"
+          if [ "${{ runner.os }}" = "macOS" ]; then
+            install_name_tool -id "@rpath/${{ matrix.wheel_lib }}" "h3_extended/${{ matrix.wheel_lib }}"
+          fi
+
+      - name: Build wheel
+        run: python -m build --wheel
+
+      - name: Inspect wheel contents
+        shell: bash
+        run: |
+          set -euo pipefail
+          wheel="$(ls dist/h3_extended-*.whl | head -1)"
+          echo "Wheel: $wheel"
+          python -m zipfile -l "$wheel" | grep -E '\.(so|dylib)$' || (
+            echo "ERROR: wheel does not bundle a shared library" >&2
+            python -m zipfile -l "$wheel" >&2
+            exit 1
+          )
+
+      - name: Install wheel into a clean venv and run tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m venv /tmp/venv-wheel
+          /tmp/venv-wheel/bin/pip install --upgrade pip
+          /tmp/venv-wheel/bin/pip install dist/h3_extended-*.whl pytest h3
+          # Run from /tmp to avoid the source tree shadowing the installed pkg.
+          cd /tmp
+          /tmp/venv-wheel/bin/pytest --pyargs h3_extended.tests -v
+
+      - name: Upload wheel artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: h3_extended-${{ matrix.os }}-${{ matrix.arch }}-py311
+          path: dist/h3_extended-*.whl
+          if-no-files-found: error
+          retention-days: 30
