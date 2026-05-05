@@ -67,6 +67,30 @@
         "testEncoderExt::d1g1_setH3Index_extResWellFormed",
         "testValidationExt::e3_isValidCellRoundTripExtCells (sentinel-7 violations)"
       ]
+    },
+    {
+      "id": "W64-CoordIJK-fields",
+      "rule": "W64",
+      "description": "v0.2.0 int → int64 widening: CoordIJK fields hold int64. Reverting to int truncates the field at the worst-case res-22 magnitude (~1.97e9 fits int32 but maxDim arithmetic 2*7^11=3.95e9 does not).",
+      "file": "src/h3lib/include/coordijk.h",
+      "find": "    int64_t i;  ///< i component\n    int64_t j;  ///< j component\n    int64_t k;  ///< k component",
+      "replace": "    int i;  ///< i component\n    int j;  ///< j component\n    int k;  ///< k component",
+      "expected_failures": [
+        "testCoordIjkExtRes::co_g3_res22_classII_roundTrip",
+        "UBSAN trip in _upAp7 / _upAp7r at res 22"
+      ]
+    },
+    {
+      "id": "W64-maxDimByCIIres",
+      "rule": "W64",
+      "description": "v0.2.0 int → int64 widening: maxDimByCIIres extended to length 23 with int64 elements. Reverting to length 21 / int makes res 21-22 read OOB (or, if length kept 23, truncate maxDim[22]=3.95e9 to a wrong int32 value, breaking _adjustOverageClassII).",
+      "file": "src/h3lib/lib/faceijk.c",
+      "find": "static const int64_t maxDimByCIIres[] = {",
+      "replace": "static const int maxDimByCIIres[] = {",
+      "expected_failures": [
+        "testCoordIjkExtRes::co_g2_res21_classIII_roundTrip",
+        "testCoordIjkExtRes::co_g3_res22_classII_roundTrip"
+      ]
     }
   ]
 }
