@@ -1,7 +1,7 @@
 # Running Tally — All Scripts and Source Files
 
-> **Last Updated:** 2026-05-05 (Sessions 5 + 6 of implementation, v0.2.0 widening complete)
-> **Scope:** H3-Extended (128-bit) preflight validation campaign + Session 1 implementation (Phases A, B, C) + Session 2 implementation (Phases D1, D2, D3, D6) + Session 3 implementation in progress (D4 + D5 complete; D7 + E + F + G + H still open). Preflight programs compile in isolation; implementation files are part of the H3 v4.4.1 source tree on `feat/h3-128-mvp`.
+> **Last Updated:** 2026-05-07 (Session 7-py + Session 8 + Session 8.5 + skill; v0.3.0-python-bindings tagged, local validation PASS, Linux x86_64 wheel published)
+> **Scope:** H3-Extended (128-bit) preflight validation campaign + Sessions 1-7 (calendar) C library implementation + Session 7-py (Python bindings + cffi + wheels + CI) + Session 8 (local validation gate) + Session 8.5 (CI workflow repair) + cross-repo reference skill. Preflight programs compile in isolation; implementation files are part of the H3 v4.4.1 source tree on `feat/h3-128-mvp`. Python package `h3_extended` and validation/skill artifacts also live in this repo.
 
 ---
 
@@ -319,6 +319,159 @@ v0.2.0 widening confirmed cross-platform under glibc + gcc + Linux x86_64 alongs
 
 ---
 
+## Session 7 Implementation Files (Tag v0.2.0 + post-MVP cleanup on `feat/h3-128-mvp`)
+
+Session 7 closes the predecessor's open items: tag v0.2.0, widen the deferred:post-mvp `cellToChildPos`/`childPosToCell` site, recalibrate libm tolerance, untrack stray POC binaries, write retrospective. No new widening rules; no new ext test suites beyond the D4-G8 addition; no stock test contract changes.
+
+### Tag (Session 7 — annotated)
+
+| Tag | Created | Description |
+|-----|---------|-------------|
+| `v0.2.0-coordijk-int64` | 2026-05-05 — created (annotated, points at `88c7c94f`) | Multi-section message: 9 Session-5/6 commits + subjects, ctest progression 326 → 327, POC-5 pre/post boundary table (hexagon res 21: 247/500 → 500/500; res 22: UBSAN trip → 500/500; pentagon res 19+: UBSAN trip → clean; 3 user-spec geos × res 20-22: 9/9 bit-identical), 3-layer cascade summary (struct → tables → inner arithmetic), stock contract precedent (testCoordIjkInternal.c INT32_MAX → INT64_MAX), full deferral list. Pushed to origin. |
+
+### cellToChildPos / childPosToCell widening (Session 7 — Rule LB)
+
+| File | Created/Modified | Description |
+|------|------------------|-------------|
+| `src/h3lib/lib/h3Index.c` | 2026-05-05 — modified (commit `ee57e69a`) | Single-commit Rule LB widening + 9 cascade sites. `cellToChildPos:1594` `H3_GET_RESOLUTION → H3_GET_EFFECTIVE_RESOLUTION`. `cellToChildPos:1621, 1648` `H3_GET_INDEX_DIGIT → H3_GET_DIGIT_AT_RES`. `childPosToCell:1681` Rule LB: `MAX_H3_RES → MAX_H3_EXT_RES`. `childPosToCell:1684` `H3_GET_RESOLUTION → H3_GET_EFFECTIVE_RESOLUTION`. `childPosToCell:1701` `H3_SET_RESOLUTION → H3_SET_EFFECTIVE_RESOLUTION`. `childPosToCell:1717, 1721, 1725, 1733` 4 × `H3_SET_INDEX_DIGIT → H3_SET_DIGIT_AT_RES`. ctest 327/327 PASS. |
+| `src/h3lib/lib/mathExtensions.c` | 2026-05-05 — modified (commit `ee57e69a`) | Latent stock bug surfaced: `_ipow` line 35's trailing `base *= base` is a dead store on the loop's last iteration. For stock res `_ipow(7,15)` was harmless; ext-res `_ipow(7,22)` trips UBSAN signed-int64 overflow at `7^32 ≈ 1.1e27`. Fix: one-line `if (exp) base *= base;` guard. |
+| `src/apps/testapps/testHierarchyExt.c` | 2026-05-05 — modified (commit `ee57e69a`) | New `TEST(d4g8_cellToChildPos_extRes)` with 5 sub-gates: G8a domain check (childRes > MAX_H3_EXT_RES rejected, negatives too); G8b hex stock-parent → ext-child round-trip across (parentRes 0..15, childRes 16..22) × 3 sample positions; G8c hex ext-parent → ext-child round-trip across (parentRes 16..21, childRes parentRes+1..22); G8d pentagon stock-parent res-15 → ext-child res-18 enumeration (286 children, 4 sample positions round-trip); G8e stock res-15 byte-identity canary. 2,513,991 assertions across the suite. |
+
+### Audit infrastructure update (Session 7)
+
+| File | Created/Modified | Description |
+|------|------------------|-------------|
+| `.claude/skills/h3-128-audit/audit.py` | 2026-05-05 — modified (commit `ee57e69a`) | Removed stale classification entry `h3Index.c:1676 "deferred:post-mvp"` (line no longer references MAX_H3_RES — widening replaced it with MAX_H3_EXT_RES, which the regex doesn't match). Replaced with documenting NOTE comment. Site count 24 → 23 (13 widened, 10 deferred). |
+| `.claude/skills/h3-128-audit/mutations/manifest.json` | 2026-05-05 — modified (commit `ee57e69a`) | Added `LB-childPosToCell` mutation (Rule LB): reverting `MAX_H3_EXT_RES → MAX_H3_RES` rejects ext-res callers with E_RES_DOMAIN; expected to break `testHierarchyExt::d4g8_cellToChildPos_extRes`. The 6 required rules (LB/GR/DW/DR/RW/INIT) and 2 W64 entries (Session 6) remain present. |
+
+### libm tolerance recalibration (Session 7)
+
+| File | Created/Modified | Description |
+|------|------------------|-------------|
+| `src/apps/applib/include/test.h` | 2026-05-05 — modified (commit `bab3d7fe`) | `latlng_within_tolerance`: ext tolerance 1e-12 → **1e-13 rad**. Comment block expanded with macOS measurement record (1000 random g_in × 23 resolutions: 0 rad delta on every resolution including res 22 — round-trip is bit-deterministic on a single platform), cross-libm ULP analysis (50 ULPs × π × 10× safety = 3.5e-13, rounded down to 1e-13 for ~640 nm headroom), explicit deferral note that empirical CI cross-platform calibration awaits a first caller. Stock tolerance unchanged at 1e-9 rad per playbook §9.2. Helper still has no callers — change is documentation + defensible default. |
+
+### POC binary untrack (Session 7)
+
+| File | Created/Modified | Description |
+|------|------------------|-------------|
+| `.gitignore` | 2026-05-05 — modified (commit `44897e50`) | Added 5 explicit entries `/poc1_bit_layout`, `/poc2_validation`, `/poc3_iterator`, `/poc4_ffi`, `/poc5_coordijk_overflow` to prevent re-tracking of extensionless POC build binaries. The existing `*.exe` / `*.out` / `*.app` patterns don't match extensionless binaries — that's how the 4 originals slipped in. |
+| `poc1_bit_layout` / `poc2_validation` / `poc3_iterator` / `poc4_ffi` | 2026-05-05 — untracked (commit `44897e50`) | `git rm --cached` only — preserved on disk for re-running as architectural diagnostics. Source files (`poc{1..5}*.{c,h,md}`) remain tracked as frozen proof artifacts per CLAUDE.md non-negotiable. |
+
+### Retrospective (Session 7)
+
+| File | Created/Modified | Description |
+|------|------------------|-------------|
+| `LESSONS_LEARNED.md` | 2026-05-05 — created (commit `100198e1`) | New top-level retrospective doc, 261 lines. 9 lessons organized by session: Sessions 5+6 (gcc constant-folds dead branches; 3-layer widening cascade; POC-5 prediction accuracy; pentagon non-monotonic boundary; hidden parameter cascade `_setIJK`/`_ijkScale`; gh-keychain-vs-PAT workflow; `git add -A` near-miss); Session 7 (`_ipow` latent dead-store overflow; `H3_GET_RESOLUTION` silently wrong for ext children). 3 candidate audit rules proposed (R-NoIntFromIjkField, R-NoStockResInWidened, R-NoUnboundedIpowAtExtRes — all with implementation sketches, NOT implemented this session). Documents intentional non-rules (H4 fix already structural; pentagon non-monotonic captured by CO-G4; git-add-A is workflow). Living doc — append future session lessons. |
+
+### Session 7 context save
+
+| File | Created/Modified | Description |
+|------|------------------|-------------|
+| `contexts/contexts-may-05-20260505-143641.md` | 2026-05-05 — created | Session 7 context save covering all 5 commits + the v0.2.0 tag + 6 open items for Session 8. |
+
+---
+
+## Session 7-py Implementation Files (Python Bindings + FFI Shim Integration on `feat/h3-128-mvp`)
+
+The "planned Session 7" from `amalfi-h3-128-session-plan.md` §7 — Python bindings on top of the C library that v0.2.0 produced. Two commits: shim extension (`74bf9053`), then Python package (`b77d7cf7`). Tag `v0.3.0-python-bindings` lands at the second commit. Pre-commit hook ran full ctest 327/327 on each commit.
+
+### FFI shim extension (Session 7-py Step 0, commit `74bf9053`)
+
+The original 10 shim functions covered indexing/hierarchy/distance but not boundary/area/grid/local-ij. Added 8 wrappers + macros so the 16-function Python API can be implemented entirely on top of the validated POC-4 by-pointer ABI.
+
+| File | Created/Modified | Description |
+|------|------------------|-------------|
+| `src/h3lib/include/h3ExtShim.h` | 2026-05-07 — modified (commit `74bf9053`) | +8 shim declarations: `h3_ext_cell_to_boundary` (CellBoundary*), `h3_ext_cell_area` (int unit dispatch with `H3_EXT_AREA_M2/KM2/RADS2 = 0/1/2`), `h3_ext_max_grid_disk_size`, `h3_ext_grid_disk`, `h3_ext_grid_path_cells_size`, `h3_ext_grid_path_cells`, `h3_ext_cell_to_local_ij` (CoordIJ*), `h3_ext_local_ij_to_cell` (const CoordIJ*). Pattern 4 contract preserved: by-pointer H3Index, H3Error returns, NULL → E_FAILED. |
+| `src/h3lib/lib/h3ExtShim.c` | 2026-05-07 — modified (commit `74bf9053`) | +8 implementations forwarding to widened H3 entry points (`cellToBoundary`, `cellAreaM2/Km2/Rads2`, `maxGridDiskSize`, `gridDisk`, `gridPathCellsSize`, `gridPathCells`, `cellToLocalIj`, `localIjToCell`). NULL → E_FAILED, bad unit code → E_OPTION_INVALID. CoordIJ and CellBoundary passed as struct pointers (public POD types in h3api.h, ABI-stable). |
+| `src/apps/testapps/testFFIShimExt.c` | 2026-05-07 — modified (commit `74bf9053`) | New `TEST(d7g4_followOnShimsLinkable)` — linkability + smoke through all 8 new functions at res 9: boundary 5..10 verts finite, area unit conversion (m²/km² 1ppb tolerance), `max_grid_disk_size(2) == 19`, `grid_disk[0] == origin`, self-path size 1, local_ij round-trip back to origin. NULL contract extended to all 8 + bad-unit (E_OPTION_INVALID) case. +41 assertions (1038 → 1079). |
+
+### Python package — h3_extended (Session 7-py Steps 1-9, commit `b77d7cf7`)
+
+A self-contained Python package that wraps the C library via cffi ABI mode. The package bundles a renamed shared library (`libh3_extended.{dylib,so}`) so it coexists with stock `h3-py` (no symbol/library collision; both can be installed and imported in the same process).
+
+| File | Created/Modified | Description |
+|------|------------------|-------------|
+| `h3_extended/__init__.py` | 2026-05-07 — created (commit `b77d7cf7`) | Public Python API: 16 functions. Indexing: `latlng_to_cell`, `cell_to_latlng`, `cell_to_boundary`. Resolution: `get_resolution`, `get_effective_resolution`, `cell_area(cell, unit='m^2')`. Hierarchy: `cell_to_parent`, `cell_to_children`. Grid: `grid_disk`, `grid_distance`, `grid_path_cells`. Local IJ: `cell_to_local_ij`, `local_ij_to_cell`. Validation: `is_valid_cell`. Stock interop: `to_64bit` (raises H3Error E_RES_DOMAIN for ext cells), `from_64bit`. Plus `H3Error` exception class. lat/lng in degrees (matches h3-py); cffi layer converts to radians for the shim. Hex strings throughout (16-char stock, 32-char ext). |
+| `h3_extended/_ffi.py` | 2026-05-07 — created (commit `b77d7cf7`) | cffi ABI-mode bindings. `ffi.cdef()` declares all 18 shim functions + 2 size probes + LatLng/CellBoundary/CoordIJ structs + 16 H3Error code constants. `ffi.dlopen()` of `libh3_extended.{dylib,so}`. Library resolution order: `H3_EXTENDED_LIB` env var (dev override) → bundled `<package_dir>/libh3_extended.{dylib,so}`. ABI consistency check at import: `h3_ext_sizeof_h3index() == 16` and `h3_ext_alignof_h3index() == 16` (fail-fast guard against accidentally loading stock 64-bit libh3). |
+| `h3_extended/batch.py` | 2026-05-07 — created (commit `b77d7cf7`) | 3 batch helpers: `batch_latlng_to_cell`, `batch_cell_to_parent`, `batch_get_resolution`. Python-loop bodies; structured for drop-in Pandas UDF / vectorized cffi upgrade later — public contract is stable. |
+| `h3_extended/tests/__init__.py` | 2026-05-07 — created (commit `b77d7cf7`) | Empty package marker. |
+| `h3_extended/tests/test_basic.py` | 2026-05-07 — created (commit `b77d7cf7`) | 23 tests — res 0-15 fundamentals: parameterized creation across all res, round-trip cell_to_latlng → re-index identity, parent/child counts, validation, area monotonicity (strictly decreasing), area unit consistency (m² ≡ km² × 1e6 within 1ppb). |
+| `h3_extended/tests/test_extended_res.py` | 2026-05-07 — created (commit `b77d7cf7`) | 23 tests — res 16-22: creation + validation, 32-char string contract, area strictly decreasing, sub-square-meter at res 20, res-22 area ratio vs res-15 area sanity check. |
+| `h3_extended/tests/test_hierarchy.py` | 2026-05-07 — created (commit `b77d7cf7`) | 10 tests — cross stock-ext boundary at res 15→16; full descent res 0 → 22; child counts 7^delta. **Anchored at parent center** rather than raw lat/lng input — `(40.33, -73.99)` sits within ε of a res-15 cell boundary, so res-15-of-input vs res-15-of-res-16-child diverged in the last digit; center anchoring is interior-safe at all coarser resolutions. |
+| `h3_extended/tests/test_backward_compat.py` | 2026-05-07 — created (commit `b77d7cf7`) | 80 tests — bit-identical match vs stock `h3-py` 4.4.2: `latlng_to_cell` byte-for-byte at res 0..15 across 3 geographies (Monmouth/Palm Beach/Sorrento); `cell_to_latlng` numerical match within 1e-12; `to_64bit`/`from_64bit` round-trip; `cell_area` rel-diff < 1e-7 (loosened from 1e-12 — observed worst 3.6e-9 is FP-reordering noise from post-int64 CoordIJK kernels, not a regression). `pytest.importorskip("h3")` so module skips cleanly when stock h3-py absent. |
+| `h3_extended/tests/test_precision.py` | 2026-05-07 — created (commit `b77d7cf7`) | 18 tests — round-trip closure at the three target geographies, res 19-22 idempotency. Cell center re-index must yield same cell; round-trip distance bounded < 1cm at res 19, < 5mm at res 20. On macOS arm64 + Apple libm the actual delta is 0 rad — round-trip is bit-deterministic on a single platform. |
+| `h3_extended/tests/test_grid_ops.py` | 2026-05-07 — created (commit `b77d7cf7`) | 16 tests — `grid_disk(k=0,1,2)` (k=2 yields 19 cells for hexagons); `grid_distance` self/neighbor; `grid_path_cells` self/two-step; `cell_to_local_ij` round-trip across res 18-20. |
+| `h3_extended/tests/test_string.py` | 2026-05-07 — created (commit `b77d7cf7`) | 33 tests — stock-res 1-16-char hex round-trip; ext-res 32-char zero-padded contract; FFI-direct round-trip via `lib.h3_ext_h3_to_string`/`string_to_h3` (mirrors C-side D7-G3); invalid hex returns False from `is_valid_cell` (no exception); `to_64bit`/`from_64bit` round-trip across all stock res. |
+| `pyproject.toml` | 2026-05-07 — created (commit `b77d7cf7`) | setuptools build backend; cffi runtime dep; pytest+h3 test deps; declares `h3_extended` package + `h3_extended.tests` subpackage; package_data includes `libh3_extended.dylib` and `libh3_extended.so`. |
+| `setup.py` | 2026-05-07 — created (commit `b77d7cf7`) | `BinaryDistribution` override (subclasses `setuptools.dist.Distribution`, returns `True` from `has_ext_modules` and `False` from `is_pure`) — forces a platform-specific wheel tag because the package bundles a native shared library as data. Without this the wheel would be tagged `py3-none-any` and fail to install on the target platform. |
+| `.github/workflows/python-wheel.yml` | 2026-05-07 — created (commit `b77d7cf7`); modified (commit `fbd8d04a`) | Cross-platform CI: matrix on `ubuntu-latest` (x86_64) + `macos-latest` (arm64). Each leg: setup-python 3.11 → cmake configure with `BUILD_SHARED_LIBS=ON` + `POSITION_INDEPENDENT_CODE` → build target h3 → stage shared library into package dir (rename to `libh3_extended.{dylib,so}`, `install_name_tool -id @rpath` on macOS) → `python -m build --wheel` → inspect wheel zipfile for bundled lib → install in clean venv from `/tmp` (avoid source-tree shadow) → `pytest --pyargs h3_extended.tests` → upload wheel as 30-day artifact named `h3_extended-<runner-os>-<arch>-py311`. |
+| `.gitignore` | 2026-05-07 — modified (commit `b77d7cf7`) | Session 7-py additions: `/dist/`, `.venv*/`, `*.egg-info/`, `__pycache__/`, `*.pyc`, `.pytest_cache/`. Bundled `libh3_extended.dylib` is excluded by the existing `*.dylib` rule (built at wheel-time, never committed). |
+| `SESSION_7_CHECKPOINT.md` | 2026-05-07 — created (commit `b77d7cf7`) | 11,868 bytes. Full Session 7-py test results, exit-criteria checkmarks, two test calibrations (cell_area 1e-12 → 1e-7 tolerance loosen, hierarchy parent-center anchoring), known issues (boundary geometric edge case), wheel artifact path + size, performance baselines. |
+
+### Session 7-py context save
+
+| File | Created/Modified | Description |
+|------|------------------|-------------|
+| `contexts/contexts-may-07-20260507-185446.md` | 2026-05-07 — created | This session's context save covering Session 7-py + Session 8 + Session 8.5 + skill setup. |
+
+---
+
+## Session 8 Implementation Files (Local Validation — Quality Gate Before Databricks)
+
+Single commit `3ee39bc7`. NO TAG (validation gate, not a release artifact). Pre-commit ran ctest 327/327. Validates the Python package end-to-end against real geotagged imagery from the sibling `amalfi_intelligence_platform` repo.
+
+### Local validation script + report (Session 8, commit `3ee39bc7`)
+
+| File | Created/Modified | Description |
+|------|------------------|-------------|
+| `validate_local.py` | 2026-05-07 — created (commit `3ee39bc7`) | ~700-line end-to-end validator. **Imagery sources**: dual-mode autodetect — JSON manifest sibling (`manifest.json` next to keyframes; capture_data schema with per-frame `gps_latitude`/`gps_longitude`) OR EXIF GPSInfo IFD (standard JPEG photo dirs). Default `--imagery` paths target the sibling repo's `photos/april-11-jpg/` and `capture_data/monmouth_30_9.02/2026-03-29/keyframes/`. **Per-image gates**: backward compat res 15 vs h3-py 4.4.2; parent res 19 → 15; parent res 20 → 19 (BOUNDARY classification for geographic edge cases — input within ε of a coarser-res cell edge); round-trip res 19 < 1cm; round-trip res 20 < 5mm; grid_disk(k=2) → 19 unique res-19 cells; string round-trip 16/32-char. **Stress test**: 100K random Monmouth-County bbox coords, deterministic LCG seed, validates no invalid res-19/res-20 cells, no invalid res-19 parents from res-20 (boundary disagreements counted as informational, not failure). **Memory leak**: 1M `latlng_to_cell` calls under tracemalloc with 5 checkpoints (0/250K/500K/750K/1M); gate < 1 MiB final delta. **Performance baselines**: 10K `latlng_to_cell(res=19)`, 10K `cell_to_parent(res19→15)`, 1K `grid_disk(k=3, res=19)` — recorded for Session 9 Databricks UDF comparison. Generates a markdown `validation_report.md` covering all sections. |
+| `validation_report.md` | 2026-05-07 — created (commit `3ee39bc7`) | Generated output of validate_local.py at HEAD `3ee39bc7`. **PASS** across all gates: 103 GPS-tagged images (40 EXIF + 63 manifest; 67 april-23-jpg skipped no GPS), 33 distinct (lat,lng) points, all per-image gates pass with 5 informational BOUNDARY rows, round-trip distance 0.000000 mm at every image, 100K stress 0/0/0 invalid + 7,218 (7.22%) boundary disagreements (informational), 1M memory leak 1.9 KiB final delta, perf baselines latlng_to_cell 390,918 ops/sec / cell_to_parent 427,932 / grid_disk(k=3) 15,343. |
+
+---
+
+## Session 8.5 — Pre-Session-9 CI Repair (destination-session pickup)
+
+A pre-Session-9 inspection of the fork's CI found `python-wheel.yml` red on both matrix legs at HEAD `3ee39bc7` (the C library `ci.yml` was green throughout). A destination-session pass fixed both bugs at commit `fbd8d04a`. Documented because regressions in this area should be recognized fast.
+
+### CI workflow fix (Session 8.5, commit `fbd8d04a`)
+
+| File | Created/Modified | Description |
+|------|------------------|-------------|
+| `.github/workflows/python-wheel.yml` | 2026-05-07 — modified (commit `fbd8d04a`) | **Bug 1** (macOS leg): `find -name '${{ matrix.lib }}*'` did not match `libh3.1.dylib` because `.1` is infixed, not suffixed. With `-not -type l` excluding the symlink, `src` was empty. **Fix**: `-type f \( -name 'libh3.[0-9]*.dylib' -o -name 'libh3.so.[0-9]*' \)` — type filter excludes symlinks naturally; explicit numeric-version patterns target the real files on both platforms. **Bug 2** (Linux leg inspect step): `python -m zipfile -l \| grep '\.(so|dylib)$'` never matched because the listing format is `Name Modified Size` (line ends in size digit). **Fix**: `\| awk '{print $1}' \| grep -E '\.(so|dylib)$'` — extract column 1 first. Both legs now go green: Linux ~43s, macOS ~31s. Linux x86_64 wheel artifact (~94 KiB) downloadable on every push to `feat/h3-128-mvp`. |
+
+---
+
+## Cross-Repo Reference Skill (commit `ec4e0ae6`)
+
+A global Claude skill that lets a session in any sibling repo (notably the Databricks integration repo for Sessions 9-11) understand what the fork produces and how to consume it. Tracked in the fork at `.claude/skills/amalfi-h3-128/` (mirroring the existing `.claude/skills/h3-128-audit/` project-local pattern); also accessible via `~/.claude/skills/amalfi-h3-128/` which is symlinked to the fork copy (single source of truth).
+
+### Skill content (commit `ec4e0ae6`)
+
+| File | Created/Modified | Description |
+|------|------------------|-------------|
+| `.claude/skills/amalfi-h3-128/SKILL.md` | 2026-05-07 — created (commit `ec4e0ae6`) | 162 lines. Entry point — frontmatter for skill discovery, executive summary as of HEAD `fbd8d04a`, "What's done" / "What's NOT yet done" matrix, quick-start consumption commands (build C lib local, pull Linux wheel from CI artifact), index pointing at the 7 detail files. |
+| `.claude/skills/amalfi-h3-128/architecture.md` | 2026-05-07 — created (commit `ec4e0ae6`) | 173 lines. Why the fork exists; 128-bit bit layout (bits 0-63 stock, bit 64 ext flag, bits 65-85 ext digits 16-22, bits 86-127 reserved zero); four non-negotiables verbatim; five POC-validated coding patterns (Group C macros, validation predicates, iterator state machine, FFI shim, widening rules); five widening rules (LB/GR/DW/DR/RW/INIT); don'ts and toolchain constraints. |
+| `.claude/skills/amalfi-h3-128/implementation-history.md` | 2026-05-07 — created (commit `ec4e0ae6`) | 361 lines. Session-by-session log: POC campaign (5 POCs, 10,067 assertions); Sessions 1-7-cal (each with phase commits + ctest progression 316 → 327); Session 7-py (Step 0 shim extension + Steps 1-9 Python package); Session 8 (validation gate); Session 8.5 (CI fix); Sessions 9-11 forward-looking. |
+| `.claude/skills/amalfi-h3-128/c-library.md` | 2026-05-07 — created (commit `ec4e0ae6`) | 260 lines. Repository paths; build-dev (sanitizers) vs build-release (shared lib for wheel) configurations; ctest baseline progression table (316 → 327 with delta-per-session attribution); stock test contract; ext test suite assertion volumes; audit infrastructure status (23 sites, 0 CRITICAL); FFI shim surface (18 functions + 2 size probes); pre-commit hook; CI matrix; POC re-run commands; post-MVP deferrals (edges/vertices/compactCells/polyfill/auxstats/MSVC). |
+| `.claude/skills/amalfi-h3-128/python-package.md` | 2026-05-07 — created (commit `ec4e0ae6`) | 307 lines. Package structure tree; 16-function API with signatures and brief docs; H3Error code reference; 3 batch helpers; installation paths (wheel + source); ABI consistency check at import; performance baselines from Session 8; test coverage breakdown; two known test calibrations (cell_area FP tolerance, hierarchy parent-center anchoring); coexistence with stock h3-py; what's NOT in the API yet. |
+| `.claude/skills/amalfi-h3-128/validation.md` | 2026-05-07 — created (commit `ec4e0ae6`) | 274 lines. Three layers of validation evidence: POC campaign (10,067 assertions), C-side ctest (327/327, ~2.5M ext assertions, audit clean), Session 8 local validation against real imagery (PASS — 103 images + 100K stress + 1M memory + perf). What was NOT validated: cross-libm round-trip variability (Apple vs glibc), pentagon-adjacent geographies in Python wrapper, real flight imagery (drone EXIF/SRT format), high-throughput vectorized path. CI verification status. |
+| `.claude/skills/amalfi-h3-128/artifacts.md` | 2026-05-07 — created (commit `ec4e0ae6`) | 281 lines. Path-by-path inventory: repository (remote + local clone + branch + HEAD); tags; wheels (local macOS arm64 + CI Linux x86_64 + macOS arm64 with build commands); compiled C library (.a / .dylib / bundled); Python package source layout; validation script + report; CI workflows; documentation files in the fork; key paths cheat-sheet; what the fork does NOT produce yet. |
+| `.claude/skills/amalfi-h3-128/databricks-roadmap.md` | 2026-05-07 — created (commit `ec4e0ae6`) | 566 lines. Session 9 (PySpark UDFs + Databricks): build h3_extended_spark.py with 11 UDFs (with NULL handling); build h3_auto_* SQL dispatch (Photon for res 0-15, h3_extended for res 16-22); upload wheel to Unity Catalog Volume; cluster init script vs notebook-scoped install; first live queries; bulk perf test; tag v0.4.0-databricks-udf. Session 10 (Delta tables + Auto-Loader): Bronze/Silver/Gold schemas, partition + Z-ORDER, S3 ingestion; tag v0.5.0-delta-pipeline. Session 11 (first flight); tag v1.0.0-first-flight. Plus pre-Session-9 sanity checklist; Resolved CI bugs (history) section preserving the diagnosis from Session 8.5; common gotchas (Linux x86_64 wheel requirement, manylinux, lat/lng-vs-lng/lat dispatch, batch.py loop bottleneck, libm cross-platform deltas, pentagon neighborhoods); architectural diagram of the dispatch layer. |
+| `.gitignore` | 2026-05-07 — modified (commit `ec4e0ae6`) | Added allowlist `!.claude/skills/amalfi-h3-128/` + `!.claude/skills/amalfi-h3-128/**` mirroring the existing h3-128-audit pattern. The rest of `.claude/` (settings, transcripts, other project-local skills) stays ephemeral. |
+
+### Filesystem-only artifacts (NOT committed in this repo)
+
+These live outside the repo and are not version-controlled here, but are part of how the skill is discovered globally.
+
+| Path | Action | Description |
+|---|---|---|
+| `~/.claude/skills/amalfi-h3-128/` | 2026-05-07 — symlink → repo path | Replaced original directory with symlink pointing at `/Users/johndesposito/amalfi_work/amalfi-h3-128/.claude/skills/amalfi-h3-128`. Single source of truth in the fork; edits anywhere update the same files; commits in the fork are the only persistence point. |
+| `~/.claude/projects/-Users-johndesposito-amalfi-work-amalfi-h3-128/memory/project_h3_128_pocs.md` | 2026-05-07 — modified | Refreshed (was 5-day-stale "POC-1 done, POCs 2-4 TBD"). Now reflects 5-POC campaign complete (10,067 assertions). |
+| `~/.claude/projects/-Users-johndesposito-amalfi-work-amalfi-h3-128/memory/feedback_session9_udf_validation.md` | 2026-05-07 — created | NEW project memory: Session 9 UDF design rule — every PySpark UDF in `h3_extended_spark.py` must validate lat/lng inputs (None, NaN, range) at the wrapper boundary, catch H3Error and return None (not raise), to defend against the lat/lng vs lng/lat swap (most common dispatch bug) and Databricks executor-crash cost. |
+| `~/.claude/projects/-Users-johndesposito-amalfi-work-amalfi-h3-128/memory/MEMORY.md` | 2026-05-07 — created | Index pointing at both memory files. |
+
+---
+
 ## Build Commands
 
 Each POC is built and run independently from the repo root:
@@ -409,7 +562,25 @@ gcc -std=c99 -fsanitize=address,undefined -Werror -Wall -Wextra \
 | Session 6 — Test infrastructure registration (CMakeTests.cmake) | — (modified) |
 | Session 6 — Audit manifest update (W64 mutations) | 1 (modified) |
 | Session 6 — SESSION_6_CHECKPOINT.md | 1 |
-| **Total** | **65** |
+| Session 7 — v0.2.0 tag (annotated) | 1 |
+| Session 7 — cellToChildPos widening (h3Index.c + mathExtensions.c + testHierarchyExt.c) | 3 (modified) |
+| Session 7 — Audit infrastructure update (audit.py + manifest.json) | 2 (modified) |
+| Session 7 — libm tolerance (test.h) | 1 (modified) |
+| Session 7 — POC binary untrack (.gitignore + 4 binaries removed) | 1 (modified) + 4 (untracked) |
+| Session 7 — LESSONS_LEARNED.md | 1 |
+| Session 7 — contexts/contexts-may-05-* | 1 |
+| Session 7-py — FFI shim extension (h3ExtShim.h + h3ExtShim.c + testFFIShimExt.c) | 3 (modified) |
+| Session 7-py — Python package source (h3_extended/__init__.py + _ffi.py + batch.py) | 3 |
+| Session 7-py — Python package tests (h3_extended/tests/ — 7 modules + __init__.py) | 8 |
+| Session 7-py — Build configuration (pyproject.toml + setup.py) | 2 |
+| Session 7-py — CI workflow (python-wheel.yml) | 1 |
+| Session 7-py — .gitignore (Python build artifacts) | 1 (modified) |
+| Session 7-py — SESSION_7_CHECKPOINT.md | 1 |
+| Session 7-py — contexts/contexts-may-07-* | 1 |
+| Session 8 — Local validation script + report (validate_local.py + validation_report.md) | 2 |
+| Session 8.5 — CI workflow fix (python-wheel.yml) | 1 (modified) |
+| Skill — Cross-repo reference (.claude/skills/amalfi-h3-128/ — 8 .md files + .gitignore allowlist) | 8 + 1 (modified) |
+| **Total** | **110** |
 
 | Metric | Value |
 |--------|-------|
@@ -425,19 +596,34 @@ gcc -std=c99 -fsanitize=address,undefined -Werror -Wall -Wextra \
 | Session 4 ctest count | 326/326 PASS (316 stock + 10 ext suites) |
 | Session 5 ctest count | 326/326 PASS (no new test suites; v0.2.0 first widening preserves count) |
 | Session 6 ctest count | **327/327 PASS** (316 stock + 11 ext suites: Session 1-4 above + testCoordIjkExtRes ~3000) |
+| Session 7 ctest count | **327/327 PASS** (no new test suites; D4-G8 added to existing testHierarchyExt → 2,513,991 assertions in that suite alone) |
+| Session 7-py ctest count | **327/327 PASS** (no new ctest suites — Python tests are separate; D7-G4 added to existing testFFIShimExt 1038 → 1079 assertions) |
+| Session 7-py pytest count | **203/203 PASS** in 0.17s (test_basic 23 + test_extended_res 23 + test_hierarchy 10 + test_backward_compat 80 + test_precision 18 + test_grid_ops 16 + test_string 33) |
+| Session 8 ctest count | 327/327 PASS (validation gate, no source changes) |
+| Session 8 validation result | **PASS** — 103 GPS-tagged images (40 EXIF + 63 manifest) all gates pass; 100K stress 0/0/0 invalid; 1M memory leak 1.9 KiB final delta; perf baselines latlng_to_cell 390,918 / cell_to_parent 427,932 / grid_disk(k=3) 15,343 ops/sec |
+| Session 8.5 ctest count | 327/327 PASS (CI workflow fix only, no source changes) |
 | Session 1 gates | A1-A5, B1, B3, C1-C3 PASS; B2 deferred |
 | Session 2 gates | D1-G1, D2-G1 (res 19), D3-G1, D6-G1 PASS; D2-G1 res 20-22 deferred (coordijk int64) |
 | Session 3 gates (mid-session) | D4-G0..G7 PASS (incl. 823,543-cell res 22 recursion), D5-G1 PASS (res 19); D7 + E + F + G + H still open |
 | Session 4 gates | D7-G1/G2/G3 PASS, E1-E7 PASS (E1+E2 CRITICAL), F1-F4 PASS (F2 ext-pentagon scoped to maxFaceCount; full overage walk deferred to coordijk int64), G1-G3 PASS, H1/H2/H3/H5/H6 PASS; H4 (CI on push) deferred. **v0.1.0-128bit-mvp tagged.** |
 | Session 5 gates | **H4 PASS** (CI matrix all 4 green on `1fa4db7c` after dispatch-macro fix). **10/10 §11 acceptance criteria PASS.** v0.2.0 begun: CoordIJK struct typedef widened. |
 | Session 6 gates | **v0.2.0 complete**: CO-G1 (res 20 round-trip), CO-G2 (res 21 round-trip — was 247/500 pre-widening, now 500/500), CO-G3 (res 22 round-trip), CO-G4 (pentagon res 19+ no UBSAN), CO-G5 (stock byte-identity), CO-G6 (3 user-spec geos × res 20-22) — ALL PASS. POC-5 predicted boundary cleared. |
+| Session 7 gates | **v0.2.0-coordijk-int64 tagged**, post-MVP cleanup: D4-G8 a..e PASS (cellToChildPos/childPosToCell ext-res round-trip). Latent `_ipow` UBSAN bug fixed. Tolerance helper recalibrated to analytically grounded 1e-13 rad ext / 1e-9 rad stock. POC binaries untracked. LESSONS_LEARNED.md retrospective written. |
+| Session 7-py gates | **v0.3.0-python-bindings tagged**: D7-G4 (8 follow-on shims linkability + smoke + extended NULL contract) PASS. 203/203 pytest PASS including bit-identical match vs h3-py 4.4.2 at res 0-15 (3 geographies × 5 res = 15 BC tests pass). Wheel `h3_extended-0.3.0-cp311-cp311-macosx_*_arm64.whl` (164 KiB) self-contained, installs cleanly in fresh /tmp venv, library resolves to site-packages. Coexists with stock h3-py (no symbol/library collision). Two test calibrations documented: cell_area BC tolerance 1e-12 → 1e-7 (FP noise); hierarchy tests anchor at parent center (geographic boundary edge case). |
+| Session 8 gates | **PASS — validation gate for Databricks**. Per-image gates 7/7 PASS at 103 images (BC res-15 vs h3-py 103/103, parent res 19→15 / 20→19 with 5 BOUNDARY informational, round-trip res 19 < 1cm + res 20 < 5mm both PASS at 0.000000 mm worst, grid_disk 19 unique res-19 cells PASS, string 16/32-char round-trip PASS). 100K stress: 0 invalid res-19/res-20/parents, 7,218 (7.22%) boundary disagreements informational. 1M memory tracemalloc: 1.9 KiB final delta (gate < 1 MiB). Perf baselines recorded. |
+| Session 8.5 gates | CI workflow `python-wheel.yml` previously red on both legs at HEAD `3ee39bc7` (BUG 1: `find` glob did not match infixed `.1` versioned dylib; BUG 2: `python -m zipfile -l` regex anchor never matched the listing format). Fixed at `fbd8d04a`: both legs go green (Linux ~43s, macOS ~31s); Linux x86_64 wheel artifact (~94 KiB) downloadable on every push. Session 9 unblocked. |
 | Session 1 commits on `feat/h3-128-mvp` | 6 (8f8829ab, b2192926, 1e7b6ee3, 089ab9b0, 9e44107e, 944d6e5c) |
 | Session 2 commits on `feat/h3-128-mvp` | 18 |
 | Session 3 commits on `feat/h3-128-mvp` (mid-session) | 7 |
 | Session 4 commits on `feat/h3-128-mvp` | 10 (closing at `6bc988e9` + docs at `2be94029`) |
 | Session 5 commits on `feat/h3-128-mvp` | 5 (1fa4db7c H4 fix, ea8503e6 H4 close-out, bef722e3 POC-5, 57672bc6 v0.2.0 typedef, 39ebff5c session-5 doc) |
 | Session 6 commits on `feat/h3-128-mvp` | 4 (f84ab171 tables, 5fbdcf4e inner arithmetic + testCoordIjkExtRes, 36a5b36d audit W64 mutations, 88c7c94f session-6 doc) |
-| Cumulative commit count | 60 (Sessions 1-6 combined) |
-| Final HEAD (Session 6 close) | `88c7c94f` |
-| Tag history | `v0.1.0-128bit-mvp` (annotated, `d9af5e79` at `6bc988e9`); v0.2.0 tag pending Session 7 |
-| CI status | All 4 matrix jobs green on run `25388983711` for HEAD `88c7c94f` (Linux + macOS, release + sanitizers) |
+| Session 7 commits on `feat/h3-128-mvp` | 4 (ee57e69a cellToChildPos + _ipow + D4-G8, bab3d7fe libm tolerance, 44897e50 POC binary untrack, 100198e1 LESSONS_LEARNED) + 1 retroactive context save commit `addbb2fb` carried over |
+| Session 7-py commits on `feat/h3-128-mvp` | 2 (74bf9053 FFI shim extension + D7-G4, b77d7cf7 Python package + cffi + wheels + CI) + tag `v0.3.0-python-bindings` at `b77d7cf7` |
+| Session 8 commits on `feat/h3-128-mvp` | 1 (3ee39bc7 validate_local.py + validation_report.md) — no tag (validation gate) |
+| Session 8.5 commits on `feat/h3-128-mvp` | 1 (fbd8d04a python-wheel.yml fix — destination-session pickup) |
+| Skill commits on `feat/h3-128-mvp` | 1 (ec4e0ae6 amalfi-h3-128 cross-repo reference skill — 8 .md files + .gitignore allowlist) |
+| Cumulative commit count | 69 (Sessions 1-7 + 7-py + 8 + 8.5 + skill; not counting tag-only updates) |
+| Final HEAD (this session close) | `ec4e0ae6` |
+| Tag history | `v0.1.0-128bit-mvp` (annotated, at `d9af5e79`); `v0.2.0-coordijk-int64` (annotated, at `88c7c94f`); **`v0.3.0-python-bindings`** (annotated, Session 7-py at `b77d7cf7`) |
+| CI status | All 4 matrix jobs (`ci.yml`) green on Linux + macOS × release + sanitizers throughout. `python-wheel.yml` was red at `3ee39bc7` due to two workflow bugs; fixed at `fbd8d04a` (Session 8.5) — both legs green: Linux ~43s, macOS ~31s. Linux x86_64 wheel artifact `h3_extended-ubuntu-latest-x86_64-py311` (~94 KiB) downloadable on every push. **Outstanding**: confirm both workflows green at HEAD `ec4e0ae6` (skill commit is docs-only, very unlikely to break anything). |
