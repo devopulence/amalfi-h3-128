@@ -55,9 +55,12 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          src="$(find build-release/lib -maxdepth 1 -name '${{ matrix.lib }}*' -not -type l | head -1)"
+          # Match the versioned, real-file output (libh3.1.dylib on macOS,
+          # libh3.so.1 on Linux). The unversioned names are symlinks that
+          # -type f naturally excludes.
+          src="$(find build-release/lib -maxdepth 1 -type f \( -name 'libh3.[0-9]*.dylib' -o -name 'libh3.so.[0-9]*' \) | head -1)"
           if [ -z "$src" ]; then
-            echo "ERROR: did not find ${{ matrix.lib }} in build-release/lib" >&2
+            echo "ERROR: did not find versioned ${{ matrix.lib }} in build-release/lib" >&2
             ls -la build-release/lib >&2
             exit 1
           fi
@@ -76,7 +79,9 @@ jobs:
           set -euo pipefail
           wheel="$(ls dist/h3_extended-*.whl | head -1)"
           echo "Wheel: $wheel"
-          python -m zipfile -l "$wheel" | grep -E '\.(so|dylib)$' || (
+          # python -m zipfile -l prints "Name  Modified  Size" — file path lives
+          # in column 1. Extract that column before grepping for the suffix.
+          python -m zipfile -l "$wheel" | awk '{print $1}' | grep -E '\.(so|dylib)$' || (
             echo "ERROR: wheel does not bundle a shared library" >&2
             python -m zipfile -l "$wheel" >&2
             exit 1
