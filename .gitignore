@@ -3,6 +3,12 @@
 
 .cache/
 
+# Local secrets — NEVER commit. Holds GITHUB_PAT and any other
+# credentials. Listed here as a safety net; named-file `git add` is
+# the primary discipline (never `git add -A`).
+.env
+.env.*
+
 # make depends files
 *.depends
 
