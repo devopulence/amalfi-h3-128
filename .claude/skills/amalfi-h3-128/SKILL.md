@@ -28,6 +28,7 @@ before any H3 source was touched, then implemented across 8 sessions.
 | `v0.1.0-128bit-mvp` | 2026-05-04 | C library complete: encode/decode/hierarchy/iterators/validation/auxiliary widened. ctest 326/326 |
 | `v0.2.0-coordijk-int64` | 2026-05-05 | CoordIJK int32 → int64 widened (unblocks res 20-22 sub-meter precision). ctest 327/327 |
 | `v0.3.0-python-bindings` | 2026-05-05 | Python `h3_extended` package via cffi ABI mode, wheel build, CI matrix. pytest 203/203 |
+| `v0.3.1-py3-tag` | 2026-05-11 | Wheel retag `cp311-cp311` → `py3-none`. Packaging fix only — no API or C library change. Required for Databricks serverless (Python 3.12) install. pytest 203/203 on both Python 3.11 and 3.12 |
 
 Plus Session 8 (no tag, validation gate): real-imagery PASS — 103
 geotagged images run through the full res-15/19/20 suite. Round-trip
@@ -101,10 +102,10 @@ cp build-release/lib/libh3.1.dylib h3_extended/libh3_extended.dylib
 install_name_tool -id @rpath/libh3_extended.dylib \
                   h3_extended/libh3_extended.dylib
 python -m build --wheel
-# Produces dist/h3_extended-0.3.0-cp311-cp311-macosx_*.whl
+# Produces dist/h3_extended-0.3.1-py3-none-macosx_*.whl
 
 # 3. Install in your other repo's venv
-pip install /path/to/amalfi-h3-128/dist/h3_extended-0.3.0-*.whl
+pip install /path/to/amalfi-h3-128/dist/h3_extended-0.3.1-*.whl
 ```
 
 **B. Linux x86_64 (Databricks target)**
@@ -123,7 +124,7 @@ GH_TOKEN="$GITHUB_PAT" gh run download <run-id> \
     -R devopulence/amalfi-h3-128 \
     -n h3_extended-ubuntu-latest-x86_64-py311
 
-# Yields: h3_extended-0.3.0-cp311-cp311-linux_x86_64.whl
+# Yields: h3_extended-0.3.1-py3-none-linux_x86_64.whl
 ```
 
 This is the wheel to upload to a Databricks Unity Catalog Volume and

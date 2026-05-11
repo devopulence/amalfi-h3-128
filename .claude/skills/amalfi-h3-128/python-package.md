@@ -4,7 +4,7 @@ cffi ABI-mode bindings for the H3-Extended C library. Sits alongside
 stock `h3-py` (renamed lib + `h3_ext_`-prefixed symbols → no
 collision; both can be installed and imported in the same process).
 
-Version: **0.3.0** (tag `v0.3.0-python-bindings`, commit `b77d7cf7`).
+Version: **0.3.1** (tag `v0.3.1-py3-tag`, packaging fix on top of `v0.3.0-python-bindings` `b77d7cf7`).
 
 ## Package structure
 
@@ -136,12 +136,13 @@ stable, only the body changes.
 ### From wheel (recommended)
 
 ```bash
-pip install h3_extended-0.3.0-cp311-cp311-<platform>.whl
+pip install h3_extended-0.3.1-py3-none-<platform>.whl
 ```
 
-Wheel filename pattern:
-- macOS arm64: `h3_extended-0.3.0-cp311-cp311-macosx_*_arm64.whl`
-- Linux x86_64: `h3_extended-0.3.0-cp311-cp311-linux_x86_64.whl`
+Wheel filename pattern (since v0.3.1 — retagged from `cp311-cp311` so any
+Python 3.x with cffi can install, including Databricks serverless 3.12):
+- macOS arm64: `h3_extended-0.3.1-py3-none-macosx_*_arm64.whl`
+- Linux x86_64: `h3_extended-0.3.1-py3-none-linux_x86_64.whl`
 
 Wheels are produced by `.github/workflows/python-wheel.yml` on every
 push and uploaded as 30-day artifacts. Download with `gh run

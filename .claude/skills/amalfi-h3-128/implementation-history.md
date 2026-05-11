@@ -342,6 +342,40 @@ ctest 327/327 (unchanged — workflow-only fix, no source changes).
 
 ---
 
+## Session 8.6 — Wheel retag for Databricks serverless (TBD commit)
+
+Pre-Session-9 install attempt on Databricks serverless (platform-side
+repo `amalfi_intelligence_platform`, Session 9 Step 5) failed at
+`%pip install` with `PipError: returned non-zero exit status 1`. Root
+cause: the wheel published by `python-wheel.yml` was tagged
+`cp311-cp311-linux_x86_64` (CI build host is Python 3.11), but
+Databricks serverless runs Python 3.12. Pip rejects strict CPython ABI
+mismatches.
+
+The `h3_extended` package doesn't actually need a CPython ABI tag —
+it's cffi ABI mode, loading `libh3.so` at runtime via
+`ffi.dlopen()`. The cp311 tag was just setuptools auto-detecting the
+build host's Python.
+
+Fix in `setup.py`:
+- Subclass `bdist_wheel` and override `get_tag()` to return
+  `("py3", "none", plat)` — forces Python-version-agnostic tag while
+  keeping the platform-specific suffix (the wheel still bundles
+  `libh3_extended.{dylib,so}`).
+- Flip `Distribution.has_ext_modules()` from `True` to `False` (the
+  package has no Python C extension — data files only).
+
+Version bumped 0.3.0 → 0.3.1 (packaging fix, no API change). Wheel
+filename `h3_extended-0.3.0-cp311-cp311-linux_x86_64.whl` becomes
+`h3_extended-0.3.1-py3-none-linux_x86_64.whl`. ctest 327/327
+unchanged (no C source touched). pytest 203/203 PASS on both
+Python 3.11 (CI build host) and Python 3.12 (Databricks serverless
+target) locally.
+
+Tag: **`v0.3.1-py3-tag`**.
+
+---
+
 ## Sessions 9, 10, 11 — Not yet started
 
 See [databricks-roadmap.md](databricks-roadmap.md) for the full plan.

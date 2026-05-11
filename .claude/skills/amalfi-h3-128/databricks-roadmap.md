@@ -140,8 +140,8 @@ Standard pattern for Databricks-hosted Python wheels:
 ```python
 # In a Databricks notebook on a cluster with Unity Catalog access
 dbutils.fs.cp(
-    "file:/local/path/h3_extended-0.3.0-cp311-cp311-linux_x86_64.whl",
-    "/Volumes/amalfi/libraries/h3_extended-0.3.0-cp311-cp311-linux_x86_64.whl"
+    "file:/local/path/h3_extended-0.3.1-py3-none-linux_x86_64.whl",
+    "/Volumes/amalfi/libraries/h3_extended-0.3.1-py3-none-linux_x86_64.whl"
 )
 ```
 
@@ -155,7 +155,7 @@ Or upload via the UI: Catalog → `amalfi.libraries` Volume → Upload.
 #!/bin/bash
 # /Volumes/amalfi/init/install_h3_extended.sh
 /databricks/python/bin/pip install \
-    /Volumes/amalfi/libraries/h3_extended-0.3.0-cp311-cp311-linux_x86_64.whl
+    /Volumes/amalfi/libraries/h3_extended-0.3.1-py3-none-linux_x86_64.whl
 ```
 
 Configure cluster: Advanced Options → Init Scripts → Volume path.
@@ -163,7 +163,7 @@ Configure cluster: Advanced Options → Init Scripts → Volume path.
 **Option B: Notebook-scoped install** (best for development):
 
 ```python
-%pip install /Volumes/amalfi/libraries/h3_extended-0.3.0-cp311-cp311-linux_x86_64.whl
+%pip install /Volumes/amalfi/libraries/h3_extended-0.3.1-py3-none-linux_x86_64.whl
 dbutils.library.restartPython()
 ```
 
@@ -535,7 +535,7 @@ cd /Users/johndesposito/amalfi_work/amalfi-h3-128
 
 # Latest tag for the C library
 git tag -l 'v0.*' --sort=creatordate | tail -1
-# → v0.3.0-python-bindings
+# → v0.3.1-py3-tag (active); v0.3.0-python-bindings (historical)
 
 # Latest commit
 git rev-parse HEAD
@@ -543,7 +543,7 @@ git rev-parse HEAD
 
 # Local wheel (macOS arm64)
 ls dist/
-# → h3_extended-0.3.0-cp311-cp311-macosx_*_arm64.whl
+# → h3_extended-0.3.1-py3-none-macosx_*_arm64.whl
 
 # Pull Linux x86_64 wheel from CI
 set -a && source .env && set +a
@@ -552,7 +552,7 @@ GH_TOKEN="$GITHUB_PAT" gh run download <latest-run-id> \
     -n h3_extended-ubuntu-latest-x86_64-py311 \
     -D /tmp/wheels
 ls /tmp/wheels/
-# → h3_extended-0.3.0-cp311-cp311-linux_x86_64.whl
+# → h3_extended-0.3.1-py3-none-linux_x86_64.whl
 
 # Smoke test (after install in Linux venv)
 python -c "

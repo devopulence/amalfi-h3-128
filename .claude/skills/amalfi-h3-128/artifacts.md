@@ -27,6 +27,7 @@ The fork is **private**. Do not vendor into open-source repos.
 | `v0.1.0-128bit-mvp` | `6bc988e9` (annotated, points at `d9af5e79`) | 2026-05-04 | C library MVP — encode/decode/hierarchy/iterators/validation/auxiliary widened. ctest 326/326 |
 | `v0.2.0-coordijk-int64` | `88c7c94f` (annotated) | 2026-05-05 | CoordIJK int32 → int64 widening. Unblocks res 20-22 sub-meter. ctest 327/327 |
 | `v0.3.0-python-bindings` | `b77d7cf7` (annotated) | 2026-05-05 | h3_extended Python package + cffi + wheels + CI. pytest 203/203 |
+| `v0.3.1-py3-tag` | TBD (annotated, this commit) | 2026-05-11 | Wheel retag `cp311-cp311` → `py3-none`. Unblocks Databricks serverless (Python 3.12). pytest 203/203 on 3.11 and 3.12 |
 
 Plus three earlier project tags from upstream (`v3.0.0` … `v3.6.0`)
 that are not relevant to the fork's work.
@@ -41,7 +42,7 @@ The next planned tag (Session 9): `v0.4.0-databricks-udf`.
 
 ```
 /Users/johndesposito/amalfi_work/amalfi-h3-128/dist/
-└── h3_extended-0.3.0-cp311-cp311-macosx_26_0_arm64.whl   (164 KiB)
+└── h3_extended-0.3.1-py3-none-macosx_26_0_arm64.whl   (~167 KiB)
 ```
 
 Built by `python -m build --wheel`. Bundles
@@ -234,7 +235,7 @@ source.
 /Users/johndesposito/amalfi_work/amalfi-h3-128/h3_extended/
 
 # Wheel output
-/Users/johndesposito/amalfi_work/amalfi-h3-128/dist/h3_extended-0.3.0-*.whl
+/Users/johndesposito/amalfi_work/amalfi-h3-128/dist/h3_extended-0.3.1-*.whl
 
 # Validation
 /Users/johndesposito/amalfi_work/amalfi-h3-128/validate_local.py
