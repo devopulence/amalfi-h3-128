@@ -1,7 +1,7 @@
 # Running Tally — All Scripts and Source Files
 
-> **Last Updated:** 2026-05-07 (Session 7-py + Session 8 + Session 8.5 + skill; v0.3.0-python-bindings tagged, local validation PASS, Linux x86_64 wheel published)
-> **Scope:** H3-Extended (128-bit) preflight validation campaign + Sessions 1-7 (calendar) C library implementation + Session 7-py (Python bindings + cffi + wheels + CI) + Session 8 (local validation gate) + Session 8.5 (CI workflow repair) + cross-repo reference skill. Preflight programs compile in isolation; implementation files are part of the H3 v4.4.1 source tree on `feat/h3-128-mvp`. Python package `h3_extended` and validation/skill artifacts also live in this repo.
+> **Last Updated:** 2026-05-12 (Session 8.6 wheel retag + .env gitignore + repo hardening; v0.3.1-py3-tag tagged, Databricks-serverless install unblocked)
+> **Scope:** H3-Extended (128-bit) preflight validation campaign + Sessions 1-7 (calendar) C library implementation + Session 7-py (Python bindings + cffi + wheels + CI) + Session 8 (local validation gate) + Session 8.5 (CI workflow repair) + cross-repo reference skill + Session 8.6 (wheel retag cp311-cp311 → py3-none for Databricks 3.12) + repo hardening (`.env` gitignore safety net, long-standing untracked items backfilled, unrelated `backtesting` agent+skill removed). Preflight programs compile in isolation; implementation files are part of the H3 v4.4.1 source tree on `feat/h3-128-mvp`. Python package `h3_extended` and validation/skill artifacts also live in this repo.
 
 ---
 
@@ -472,6 +472,84 @@ These live outside the repo and are not version-controlled here, but are part of
 
 ---
 
+## Session 8.6 Implementation Files (Wheel retag for Databricks serverless on `feat/h3-128-mvp`)
+
+Pre-Session-9 packaging fix. The wheel published at v0.3.0 was tagged `cp311-cp311-<plat>` (CI build host = Python 3.11). Databricks serverless runs Python 3.12, and pip rejects strict CPython ABI mismatches — install failed with `PipError: returned non-zero exit status 1`, blocking platform-side Session 9 Step 5. The package is cffi ABI mode (no Python C extension; `libh3` loaded at runtime via `ffi.dlopen()`), so the cp311 ABI tag was never load-bearing. One commit (`11f383fe`), tag `v0.3.1-py3-tag`. Pre-commit ran ctest 327/327.
+
+### Wheel retag (Session 8.6, commit `11f383fe`)
+
+| File | Created/Modified | Description |
+|------|------------------|-------------|
+| `setup.py` | 2026-05-11 — modified (commit `11f383fe`) | Subclass `bdist_wheel` and override `get_tag()` to return `("py3", "none", plat)` — explicit, doesn't depend on internal `has_ext_modules` heuristics. Try-import `wheel.bdist_wheel` first, fall back to `setuptools.command.bdist_wheel` for newer setuptools. Flip `Distribution.has_ext_modules()` True → False (no Python C extension; bundled `.so`/`.dylib` are data files). Keep `is_pure()` False so wheel stays platform-tagged. Docstring expanded with Databricks 3.12 motivation. |
+| `pyproject.toml` | 2026-05-11 — modified (commit `11f383fe`) | Version 0.3.0 → 0.3.1. |
+| `h3_extended/__init__.py` | 2026-05-11 — modified (commit `11f383fe`) | `__version__` 0.3.0 → 0.3.1. |
+| `.claude/skills/amalfi-h3-128/SKILL.md` | 2026-05-11 — modified (commit `11f383fe`) | Added `v0.3.1-py3-tag` row to tags table; updated wheel filenames in quick-start commands. |
+| `.claude/skills/amalfi-h3-128/artifacts.md` | 2026-05-11 — modified (commit `11f383fe`) | Added `v0.3.1-py3-tag` row to tags table; updated wheel filename example. |
+| `.claude/skills/amalfi-h3-128/python-package.md` | 2026-05-11 — modified (commit `11f383fe`) | Version 0.3.0 → 0.3.1; install pattern → `py3-none-<platform>`; retag rationale note. |
+| `.claude/skills/amalfi-h3-128/databricks-roadmap.md` | 2026-05-11 — modified (commit `11f383fe`) | All wheel filename references retargeted to `h3_extended-0.3.1-py3-none-linux_x86_64.whl`. |
+| `.claude/skills/amalfi-h3-128/implementation-history.md` | 2026-05-11 — modified (commit `11f383fe`) | Added Session 8.6 entry between Session 8.5 (CI fix) and Sessions 9-11. |
+
+**Local validation** (macOS arm64): build produced `py3-none-macosx_26_0_arm64`. pytest **203/203 PASS on Python 3.11** (.venv-test). pytest **203/203 PASS on Python 3.12** (fresh `/tmp/wheel-check` venv). Smoke calls match canonical Monmouth reference cells (`8f2a139108ac78d` at res 15).
+
+**CI validation**: run `25666972631` succeeded in **41 s**, both matrix legs produced correctly-tagged artifacts:
+- `h3_extended-0.3.1-py3-none-linux_x86_64.whl` (Linux x86_64)
+- `h3_extended-0.3.1-py3-none-macosx_15_0_universal2.whl` (macOS — note `universal2` because CI's macos-latest is macOS 15, producing lipo'd binaries that work on both arm64 and Intel)
+
+### Tag created
+
+| File | Created/Modified | Description |
+|------|------------------|-------------|
+| `v0.3.1-py3-tag` | 2026-05-11 — annotated tag at `11f383fe` | Documents the cp311-cp311 → py3-none retag rationale, validation results, and wheel filename changes. v0.3.0-python-bindings stays valid alongside. |
+
+---
+
+## Repo Hardening + Cleanup (`feat/h3-128-mvp`)
+
+Two commits driven by a leaked-PAT incident (May 12) and follow-up evaluation of long-standing untracked items. No source changes.
+
+### .env safety net (commit `2c242d63`)
+
+Triggered by an IDE system reminder echoing `.env` contents (including `GITHUB_PAT`) into the conversation transcript. Diagnostic confirmed `.env` was never in git history (never staged, never in any commit's tree) — the file stayed safe only because of named-file `git add` discipline, not because of any `.gitignore` rule. Added explicit `.env` and `.env.*` entries as a safety net. User explicitly declined to rotate the leaked PAT; the conversation transcript is the only persistence point for the exposure.
+
+| File | Created/Modified | Description |
+|------|------------------|-------------|
+| `.gitignore` | 2026-05-12 — modified (commit `2c242d63`) | Added `.env` and `.env.*` to top section with comment block flagging the secrets-protection role. Two-line additive change. |
+
+### Track session-state + cleanup (commit `8bc3130b`)
+
+User requested commit of long-standing untracked items. Re-evaluated each honestly: kept everything except two genuinely-unrelated items (`backtesting` agent + skill, both Phemex crypto-trading, leftover from a multi-project workspace).
+
+| File | Created/Modified | Description |
+|------|------------------|-------------|
+| `.gitignore` | 2026-05-12 — modified (commit `8bc3130b`) | Added allowlist entries: `!.claude/commands/`, `!.claude/commands/**`, `!.claude/skills/persist-session/`, `!.claude/skills/persist-session/**`, `!.claude/skills/resume/`, `!.claude/skills/resume/**`. Mirrors the existing h3-128-audit + amalfi-h3-128 pattern. |
+| `.claude/commands/resume.md` | 2026-05-12 — committed (was untracked since 2026-04-29) | Resume slash command body (486 bytes). |
+| `.claude/commands/save-session.md` | 2026-05-12 — committed (was untracked since 2026-04-29) | Save-session slash command body (1008 bytes). |
+| `.claude/commands/ss.md` | 2026-05-12 — committed (was untracked since 2026-04-29) | Short alias for save-session (983 bytes). |
+| `.claude/skills/persist-session/SKILL.md` | 2026-05-12 — committed (was untracked) | Persist-session skill definition. |
+| `.claude/skills/persist-session/references/context-template.md` | 2026-05-12 — committed (was untracked) | Template the persist-session skill uses to generate context save files. |
+| `.claude/skills/resume/SKILL.md` | 2026-05-12 — committed (was untracked) | Resume skill definition. |
+| `amalfi-h3-128-session-plan.md` | 2026-05-12 — committed (was untracked since 2026-05-05) | 336-line planning doc covering Sessions 6-11 (CoordIJK int64 → Python bindings → local validation → Databricks UDFs → Delta pipeline → first flight). Comparable to `SESSION_GUIDE.md`. |
+| `initial-main-event-prompt.md` | 2026-05-12 — committed (was untracked since 2026-05-02) | 29-line kickoff prompt that initiated the implementation work. Preserved for historical context. |
+| `contexts/contexts-may-02-20260502-183908.md` | 2026-05-12 — committed (was untracked since 2026-05-02) | Older context save from POC era. |
+| `contexts/contexts-may-03-20260503-154140.md` | 2026-05-12 — committed (was untracked since 2026-05-03) | Older context save (POC continuation). |
+| `contexts/contexts-may-03-20260503-201452.md` | 2026-05-12 — committed (was untracked since 2026-05-03) | Older context save (Session 1 start). |
+| `contexts/contexts-may-05-20260505-143641.md` | 2026-05-12 — committed (was untracked since 2026-05-05) | Session 7 (calendar) context save covering v0.2.0 finishing moves. |
+
+### Removed from working tree (NOT committed — never tracked)
+
+| File | Action | Reason |
+|------|--------|--------|
+| `.claude/agents/backtesting.md` | 2026-05-12 — deleted | Phemex crypto-trading agent (5556 bytes). Leftover from a multi-project workspace; unrelated to H3 fork. |
+| `.claude/skills/backtesting/SKILL.md` | 2026-05-12 — deleted | Phemex crypto-trading skill. Same rationale. |
+
+### Session 8.6 + repo hardening context save
+
+| File | Created/Modified | Description |
+|------|------------------|-------------|
+| `contexts/contexts-may-12-20260512-141924.md` | 2026-05-12 — created | This session's context save covering wheel retag + repo hardening + tracked-files backfill. |
+
+---
+
 ## Build Commands
 
 Each POC is built and run independently from the repo root:
@@ -580,7 +658,11 @@ gcc -std=c99 -fsanitize=address,undefined -Werror -Wall -Wextra \
 | Session 8 — Local validation script + report (validate_local.py + validation_report.md) | 2 |
 | Session 8.5 — CI workflow fix (python-wheel.yml) | 1 (modified) |
 | Skill — Cross-repo reference (.claude/skills/amalfi-h3-128/ — 8 .md files + .gitignore allowlist) | 8 + 1 (modified) |
-| **Total** | **110** |
+| Session 8.6 — Wheel retag (setup.py + pyproject.toml + __init__.py + 5 skill .md files) | 8 (modified) |
+| Repo hardening — .env gitignore safety net | 1 (modified) |
+| Repo hardening — track session-state (.claude/commands/ + persist-session/ + resume/ skills + 4 contexts/ + 2 root .md files) | 12 + 1 (modified) |
+| Session 8.6 + hardening context save | 1 |
+| **Total** | **131** |
 
 | Metric | Value |
 |--------|-------|
@@ -602,6 +684,9 @@ gcc -std=c99 -fsanitize=address,undefined -Werror -Wall -Wextra \
 | Session 8 ctest count | 327/327 PASS (validation gate, no source changes) |
 | Session 8 validation result | **PASS** — 103 GPS-tagged images (40 EXIF + 63 manifest) all gates pass; 100K stress 0/0/0 invalid; 1M memory leak 1.9 KiB final delta; perf baselines latlng_to_cell 390,918 / cell_to_parent 427,932 / grid_disk(k=3) 15,343 ops/sec |
 | Session 8.5 ctest count | 327/327 PASS (CI workflow fix only, no source changes) |
+| Session 8.6 ctest count | 327/327 PASS (wheel-tag fix only, no C source touched) |
+| Session 8.6 pytest count | **203/203 PASS** on Python 3.11 AND Python 3.12 (the Databricks serverless target). Smoke calls match canonical Monmouth reference cells. |
+| Session 8.6 wheel CI result | CI run `25666972631`, **41 s wall**, both matrix legs green. Linux artifact `h3_extended-0.3.1-py3-none-linux_x86_64.whl`; macOS artifact `h3_extended-0.3.1-py3-none-macosx_15_0_universal2.whl`. Tags verified against downloaded WHEEL metadata. |
 | Session 1 gates | A1-A5, B1, B3, C1-C3 PASS; B2 deferred |
 | Session 2 gates | D1-G1, D2-G1 (res 19), D3-G1, D6-G1 PASS; D2-G1 res 20-22 deferred (coordijk int64) |
 | Session 3 gates (mid-session) | D4-G0..G7 PASS (incl. 823,543-cell res 22 recursion), D5-G1 PASS (res 19); D7 + E + F + G + H still open |
@@ -612,6 +697,7 @@ gcc -std=c99 -fsanitize=address,undefined -Werror -Wall -Wextra \
 | Session 7-py gates | **v0.3.0-python-bindings tagged**: D7-G4 (8 follow-on shims linkability + smoke + extended NULL contract) PASS. 203/203 pytest PASS including bit-identical match vs h3-py 4.4.2 at res 0-15 (3 geographies × 5 res = 15 BC tests pass). Wheel `h3_extended-0.3.0-cp311-cp311-macosx_*_arm64.whl` (164 KiB) self-contained, installs cleanly in fresh /tmp venv, library resolves to site-packages. Coexists with stock h3-py (no symbol/library collision). Two test calibrations documented: cell_area BC tolerance 1e-12 → 1e-7 (FP noise); hierarchy tests anchor at parent center (geographic boundary edge case). |
 | Session 8 gates | **PASS — validation gate for Databricks**. Per-image gates 7/7 PASS at 103 images (BC res-15 vs h3-py 103/103, parent res 19→15 / 20→19 with 5 BOUNDARY informational, round-trip res 19 < 1cm + res 20 < 5mm both PASS at 0.000000 mm worst, grid_disk 19 unique res-19 cells PASS, string 16/32-char round-trip PASS). 100K stress: 0 invalid res-19/res-20/parents, 7,218 (7.22%) boundary disagreements informational. 1M memory tracemalloc: 1.9 KiB final delta (gate < 1 MiB). Perf baselines recorded. |
 | Session 8.5 gates | CI workflow `python-wheel.yml` previously red on both legs at HEAD `3ee39bc7` (BUG 1: `find` glob did not match infixed `.1` versioned dylib; BUG 2: `python -m zipfile -l` regex anchor never matched the listing format). Fixed at `fbd8d04a`: both legs go green (Linux ~43s, macOS ~31s); Linux x86_64 wheel artifact (~94 KiB) downloadable on every push. Session 9 unblocked. |
+| Session 8.6 gates | **v0.3.1-py3-tag — Databricks-serverless install unblocker**. Wheel retag `cp311-cp311` → `py3-none`. setup.py overrides bdist_wheel.get_tag() to force ("py3", "none", plat); has_ext_modules flipped True → False (no Python C extension; cffi ABI mode dlopens libh3 at runtime). Version 0.3.0 → 0.3.1. pytest 203/203 PASS on Python 3.11 AND 3.12 locally. CI run 25666972631 green, both matrix legs produced correctly-tagged artifacts. v0.3.0-python-bindings tag remains valid alongside. |
 | Session 1 commits on `feat/h3-128-mvp` | 6 (8f8829ab, b2192926, 1e7b6ee3, 089ab9b0, 9e44107e, 944d6e5c) |
 | Session 2 commits on `feat/h3-128-mvp` | 18 |
 | Session 3 commits on `feat/h3-128-mvp` (mid-session) | 7 |
@@ -623,7 +709,9 @@ gcc -std=c99 -fsanitize=address,undefined -Werror -Wall -Wextra \
 | Session 8 commits on `feat/h3-128-mvp` | 1 (3ee39bc7 validate_local.py + validation_report.md) — no tag (validation gate) |
 | Session 8.5 commits on `feat/h3-128-mvp` | 1 (fbd8d04a python-wheel.yml fix — destination-session pickup) |
 | Skill commits on `feat/h3-128-mvp` | 1 (ec4e0ae6 amalfi-h3-128 cross-repo reference skill — 8 .md files + .gitignore allowlist) |
-| Cumulative commit count | 69 (Sessions 1-7 + 7-py + 8 + 8.5 + skill; not counting tag-only updates) |
-| Final HEAD (this session close) | `ec4e0ae6` |
-| Tag history | `v0.1.0-128bit-mvp` (annotated, at `d9af5e79`); `v0.2.0-coordijk-int64` (annotated, at `88c7c94f`); **`v0.3.0-python-bindings`** (annotated, Session 7-py at `b77d7cf7`) |
-| CI status | All 4 matrix jobs (`ci.yml`) green on Linux + macOS × release + sanitizers throughout. `python-wheel.yml` was red at `3ee39bc7` due to two workflow bugs; fixed at `fbd8d04a` (Session 8.5) — both legs green: Linux ~43s, macOS ~31s. Linux x86_64 wheel artifact `h3_extended-ubuntu-latest-x86_64-py311` (~94 KiB) downloadable on every push. **Outstanding**: confirm both workflows green at HEAD `ec4e0ae6` (skill commit is docs-only, very unlikely to break anything). |
+| Session 8.6 commits on `feat/h3-128-mvp` | 1 (11f383fe wheel retag — setup.py override + version bump + skill update) + tag `v0.3.1-py3-tag` at `11f383fe` |
+| Repo hardening commits on `feat/h3-128-mvp` | 2 (2c242d63 .env gitignore safety net; 8bc3130b track session-state + remove backtesting) |
+| Cumulative commit count | 73 (Sessions 1-7 + 7-py + 8 + 8.5 + skill + 8.6 + 2 hardening; not counting tag-only updates) |
+| Final HEAD (this session close) | `8bc3130b` |
+| Tag history | `v0.1.0-128bit-mvp` (annotated, at `d9af5e79`); `v0.2.0-coordijk-int64` (annotated, at `88c7c94f`); `v0.3.0-python-bindings` (annotated, at `b77d7cf7`); **`v0.3.1-py3-tag`** (annotated, Session 8.6 at `11f383fe`) |
+| CI status | All 4 matrix jobs (`ci.yml`) green on Linux + macOS × release + sanitizers throughout. `python-wheel.yml` was red at `3ee39bc7` due to two workflow bugs; fixed at `fbd8d04a` (Session 8.5). At `11f383fe` (Session 8.6) verified green: CI run `25666972631`, 41s wall, both matrix legs uploaded correctly-tagged artifacts (`h3_extended-0.3.1-py3-none-linux_x86_64.whl` and `h3_extended-0.3.1-py3-none-macosx_15_0_universal2.whl`). **Outstanding**: confirm both workflows green at HEAD `8bc3130b` (commits after `11f383fe` are pure docs/config — no source change). |
