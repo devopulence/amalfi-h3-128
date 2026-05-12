@@ -546,7 +546,8 @@ User requested commit of long-standing untracked items. Re-evaluated each honest
 
 | File | Created/Modified | Description |
 |------|------------------|-------------|
-| `contexts/contexts-may-12-20260512-141924.md` | 2026-05-12 — created | This session's context save covering wheel retag + repo hardening + tracked-files backfill. |
+| `contexts/contexts-may-12-20260512-141924.md` | 2026-05-12 — created (committed in `a56c7e29` by user) | Session 8.6 + repo hardening context save covering wheel retag + tracked-files backfill. |
+| `contexts/contexts-may-12-20260512-144622.md` | 2026-05-12 — created | Minimal close-out save documenting the user-led commit (`a56c7e29`, message "after save session") + push of the prior save. Notes the silent-ctest phenomenon during the ~10 min pre-commit run that gave the appearance of a hang. |
 
 ---
 
@@ -662,7 +663,8 @@ gcc -std=c99 -fsanitize=address,undefined -Werror -Wall -Wextra \
 | Repo hardening — .env gitignore safety net | 1 (modified) |
 | Repo hardening — track session-state (.claude/commands/ + persist-session/ + resume/ skills + 4 contexts/ + 2 root .md files) | 12 + 1 (modified) |
 | Session 8.6 + hardening context save | 1 |
-| **Total** | **131** |
+| Close-out save (post-push verification) | 1 |
+| **Total** | **132** |
 
 | Metric | Value |
 |--------|-------|
