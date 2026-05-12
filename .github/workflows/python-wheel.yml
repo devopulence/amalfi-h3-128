@@ -3,28 +3,43 @@ name: Python wheel
 on:
   push:
     branches: [feat/h3-128-mvp, master]
-    tags: ["v*-python-bindings", "v*-manylinux-wheel"]
+    tags: ["v*-python-bindings", "v*-manylinux-wheel", "v*-multiarch-wheel"]
   pull_request:
     branches: [feat/h3-128-mvp, master]
   workflow_dispatch:
 
 jobs:
   build-linux:
-    name: Build + test ubuntu-latest (x86_64) manylinux2014
-    runs-on: ubuntu-latest
+    name: Build + test ${{ matrix.runner }} (${{ matrix.arch }}) manylinux2014
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-latest
+            arch: x86_64
+            image: quay.io/pypa/manylinux2014_x86_64
+            docker_platform: linux/amd64
+            audit_plat: manylinux2014_x86_64
+          - runner: ubuntu-24.04-arm
+            arch: aarch64
+            image: quay.io/pypa/manylinux2014_aarch64
+            docker_platform: linux/arm64
+            audit_plat: manylinux2014_aarch64
     steps:
       - uses: actions/checkout@v4
 
-      - name: Build + audit + test wheel inside manylinux2014_x86_64
+      - name: Build + audit + test wheel inside ${{ matrix.image }}
         shell: bash
         run: |
           set -euo pipefail
           docker run --rm \
+            --platform ${{ matrix.docker_platform }} \
             --user "$(id -u):$(id -g)" \
             -e HOME=/tmp/h-home \
             -v "$GITHUB_WORKSPACE":/work \
             -w /work \
-            quay.io/pypa/manylinux2014_x86_64 \
+            ${{ matrix.image }} \
             bash -euo pipefail -c '
               mkdir -p "$HOME"
               export PATH=/opt/python/cp311-cp311/bin:$PATH
@@ -64,12 +79,12 @@ jobs:
               python -m build --wheel
 
               echo "--- auditwheel show (pre-repair) ---"
-              auditwheel show dist/h3_extended-*linux_x86_64.whl
+              auditwheel show dist/h3_extended-*linux_${{ matrix.arch }}.whl
 
-              echo "--- auditwheel repair --plat manylinux2014_x86_64 ---"
-              auditwheel repair --plat manylinux2014_x86_64 -w dist/ \
-                dist/h3_extended-*linux_x86_64.whl
-              rm dist/h3_extended-*-linux_x86_64.whl
+              echo "--- auditwheel repair --plat ${{ matrix.audit_plat }} ---"
+              auditwheel repair --plat ${{ matrix.audit_plat }} -w dist/ \
+                dist/h3_extended-*linux_${{ matrix.arch }}.whl
+              rm dist/h3_extended-*-linux_${{ matrix.arch }}.whl
               ls -la dist/
 
               echo "--- inspect wheel contents ---"
@@ -92,7 +107,7 @@ jobs:
       - name: Upload Linux wheel artifact
         uses: actions/upload-artifact@v4
         with:
-          name: h3_extended-ubuntu-latest-x86_64-py311
+          name: h3_extended-${{ matrix.runner }}-${{ matrix.arch }}-py311
           path: dist/h3_extended-*.whl
           if-no-files-found: error
           retention-days: 30
