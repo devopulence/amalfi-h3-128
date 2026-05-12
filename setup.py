@@ -38,10 +38,17 @@ class BinaryDistribution(Distribution):
     """No Python C extensions, but platform-specific data (.so / .dylib).
 
     Combined with the bdist_wheel override above, yields py3-none-<plat>.
+
+    has_ext_modules=True is required to place the bundled .so in the wheel's
+    platlib section (not purelib). auditwheel repair refuses wheels where
+    shared libraries live in purelib ("Invalid binary wheel, found shared
+    library in purelib folder"). The get_tag() override above still forces
+    py3-none regardless of has_ext_modules, so the wheel filename is
+    unaffected — only the internal layout moves .so → platlib/.
     """
 
     def has_ext_modules(self):  # type: ignore[override]
-        return False
+        return True
 
     def is_pure(self):  # type: ignore[override]
         return False

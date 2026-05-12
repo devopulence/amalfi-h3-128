@@ -3,27 +3,103 @@ name: Python wheel
 on:
   push:
     branches: [feat/h3-128-mvp, master]
-    tags: ["v*-python-bindings"]
+    tags: ["v*-python-bindings", "v*-manylinux-wheel"]
   pull_request:
     branches: [feat/h3-128-mvp, master]
   workflow_dispatch:
 
 jobs:
-  build-wheel:
-    name: Build + test ${{ matrix.os }} (${{ matrix.arch }})
-    runs-on: ${{ matrix.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - os: ubuntu-latest
-            arch: x86_64
-            lib: libh3.so
-            wheel_lib: libh3_extended.so
-          - os: macos-latest
-            arch: arm64
-            lib: libh3.dylib
-            wheel_lib: libh3_extended.dylib
+  build-linux:
+    name: Build + test ubuntu-latest (x86_64) manylinux2014
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build + audit + test wheel inside manylinux2014_x86_64
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker run --rm \
+            --user "$(id -u):$(id -g)" \
+            -e HOME=/tmp/h-home \
+            -v "$GITHUB_WORKSPACE":/work \
+            -w /work \
+            quay.io/pypa/manylinux2014_x86_64 \
+            bash -euo pipefail -c '
+              mkdir -p "$HOME"
+              export PATH=/opt/python/cp311-cp311/bin:$PATH
+              echo "--- toolchain ---"
+              which cmake && cmake --version | head -1
+              which gcc && gcc --version | head -1
+              which auditwheel && auditwheel --version
+              which python && python --version
+
+              echo "--- pip install ---"
+              python -m pip install --no-cache-dir --upgrade pip build cffi pytest h3
+
+              echo "--- cmake configure ---"
+              mkdir -p build-release && cd build-release
+              cmake .. \
+                -DCMAKE_POSITION_INDEPENDENT_CODE=ON \
+                -DCMAKE_BUILD_TYPE=Release \
+                -DBUILD_SHARED_LIBS=ON \
+                -DBUILD_TESTING=OFF \
+                -DBUILD_BENCHMARKS=OFF \
+                -DBUILD_FILTERS=OFF \
+                -DBUILD_GENERATORS=OFF
+              cmake --build . -j --target h3
+
+              echo "--- stage libh3 ---"
+              cd ..
+              src="$(find build-release/lib -maxdepth 1 -type f -name "libh3.so.[0-9]*" | head -1)"
+              if [ -z "$src" ]; then
+                echo "ERROR: did not find versioned libh3.so in build-release/lib" >&2
+                ls -la build-release/lib >&2
+                exit 1
+              fi
+              echo "Staging $src as h3_extended/libh3_extended.so"
+              cp "$src" h3_extended/libh3_extended.so
+
+              echo "--- build wheel ---"
+              python -m build --wheel
+
+              echo "--- auditwheel show (pre-repair) ---"
+              auditwheel show dist/h3_extended-*linux_x86_64.whl
+
+              echo "--- auditwheel repair --plat manylinux2014_x86_64 ---"
+              auditwheel repair --plat manylinux2014_x86_64 -w dist/ \
+                dist/h3_extended-*linux_x86_64.whl
+              rm dist/h3_extended-*-linux_x86_64.whl
+              ls -la dist/
+
+              echo "--- inspect wheel contents ---"
+              wheel="$(ls dist/h3_extended-*.whl | head -1)"
+              python -m zipfile -l "$wheel" | awk "{print \$1}" | grep -E "\.(so|dylib)$" || (
+                echo "ERROR: wheel does not bundle a shared library" >&2
+                python -m zipfile -l "$wheel" >&2
+                exit 1
+              )
+
+              echo "--- install into fresh venv + pytest ---"
+              python -m venv /tmp/venv-wheel
+              /tmp/venv-wheel/bin/pip install --no-cache-dir --upgrade pip
+              /tmp/venv-wheel/bin/pip install --no-cache-dir \
+                dist/h3_extended-*manylinux*.whl pytest h3
+              cd /tmp
+              /tmp/venv-wheel/bin/pytest --pyargs h3_extended.tests -v
+            '
+
+      - name: Upload Linux wheel artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: h3_extended-ubuntu-latest-x86_64-py311
+          path: dist/h3_extended-*.whl
+          if-no-files-found: error
+          retention-days: 30
+
+  build-macos:
+    name: Build + test macos-latest (arm64)
+    runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
 
@@ -55,20 +131,15 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          # Match the versioned, real-file output (libh3.1.dylib on macOS,
-          # libh3.so.1 on Linux). The unversioned names are symlinks that
-          # -type f naturally excludes.
-          src="$(find build-release/lib -maxdepth 1 -type f \( -name 'libh3.[0-9]*.dylib' -o -name 'libh3.so.[0-9]*' \) | head -1)"
+          src="$(find build-release/lib -maxdepth 1 -type f -name 'libh3.[0-9]*.dylib' | head -1)"
           if [ -z "$src" ]; then
-            echo "ERROR: did not find versioned ${{ matrix.lib }} in build-release/lib" >&2
+            echo "ERROR: did not find versioned libh3.dylib in build-release/lib" >&2
             ls -la build-release/lib >&2
             exit 1
           fi
-          echo "Staging $src as h3_extended/${{ matrix.wheel_lib }}"
-          cp "$src" "h3_extended/${{ matrix.wheel_lib }}"
-          if [ "${{ runner.os }}" = "macOS" ]; then
-            install_name_tool -id "@rpath/${{ matrix.wheel_lib }}" "h3_extended/${{ matrix.wheel_lib }}"
-          fi
+          echo "Staging $src as h3_extended/libh3_extended.dylib"
+          cp "$src" "h3_extended/libh3_extended.dylib"
+          install_name_tool -id "@rpath/libh3_extended.dylib" "h3_extended/libh3_extended.dylib"
 
       - name: Build wheel
         run: python -m build --wheel
@@ -79,8 +150,6 @@ jobs:
           set -euo pipefail
           wheel="$(ls dist/h3_extended-*.whl | head -1)"
           echo "Wheel: $wheel"
-          # python -m zipfile -l prints "Name  Modified  Size" — file path lives
-          # in column 1. Extract that column before grepping for the suffix.
           python -m zipfile -l "$wheel" | awk '{print $1}' | grep -E '\.(so|dylib)$' || (
             echo "ERROR: wheel does not bundle a shared library" >&2
             python -m zipfile -l "$wheel" >&2
@@ -94,14 +163,13 @@ jobs:
           python -m venv /tmp/venv-wheel
           /tmp/venv-wheel/bin/pip install --upgrade pip
           /tmp/venv-wheel/bin/pip install dist/h3_extended-*.whl pytest h3
-          # Run from /tmp to avoid the source tree shadowing the installed pkg.
           cd /tmp
           /tmp/venv-wheel/bin/pytest --pyargs h3_extended.tests -v
 
-      - name: Upload wheel artifact
+      - name: Upload macOS wheel artifact
         uses: actions/upload-artifact@v4
         with:
-          name: h3_extended-${{ matrix.os }}-${{ matrix.arch }}-py311
+          name: h3_extended-macos-latest-arm64-py311
           path: dist/h3_extended-*.whl
           if-no-files-found: error
           retention-days: 30

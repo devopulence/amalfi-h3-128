@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "h3_extended"
-version = "0.3.1"
+version = "0.3.2"
 description = "Python bindings for the H3-Extended (128-bit) spatial index — resolutions 0–22 (~1cm)."
 requires-python = ">=3.9"
 authors = [{ name = "Amalfi Intelligence" }]
